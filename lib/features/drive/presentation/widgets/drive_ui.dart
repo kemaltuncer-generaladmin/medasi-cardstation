@@ -585,23 +585,26 @@ class PrimaryGradientButton extends StatelessWidget {
 
   final String label;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final double height;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return SizedBox(
       height: height,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
+          gradient: enabled ? AppColors.primaryGradient : null,
+          color: enabled ? null : AppColors.line,
           borderRadius: BorderRadius.circular(10),
           boxShadow: [
-            BoxShadow(
-              color: AppColors.blue.withValues(alpha: .20),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
+            if (enabled)
+              BoxShadow(
+                color: AppColors.blue.withValues(alpha: .20),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
           ],
         ),
         child: ElevatedButton(

@@ -93,8 +93,8 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
       GeneratedKind.question => BaseForceView.questionFactory,
       GeneratedKind.summary => BaseForceView.summaryFactory,
       GeneratedKind.algorithm => BaseForceView.algorithmFactory,
-      GeneratedKind.comparison || GeneratedKind.table =>
-        BaseForceView.comparisonFactory,
+      GeneratedKind.comparison ||
+      GeneratedKind.table => BaseForceView.comparisonFactory,
       _ => BaseForceView.flashcardFactory,
     };
   }
@@ -157,7 +157,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
   }
 
   void _uploadGuidanceToast() {
-    _toast('Yeni dosya yüklemek için Drive > Yüklemeler ekranındaki Yeni Dosya akışını kullanın.');
+    _toast(
+      'Yeni dosya yüklemek için Drive > Yüklemeler ekranındaki Yeni Dosya akışını kullanın.',
+    );
   }
 
   Future<void> _copyLatestResult() async {
@@ -187,7 +189,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
   Future<void> _cancelJob(_BaseForceJobState job) async {
     final jobId = job.jobId?.trim() ?? '';
     if (jobId.isEmpty) {
-      _toast('Bu üretim henüz backend job id almadı; birkaç saniye sonra tekrar deneyin.');
+      _toast(
+        'Bu üretim henüz backend job id almadı; birkaç saniye sonra tekrar deneyin.',
+      );
       return;
     }
     try {
@@ -249,22 +253,66 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
 
   DriveFile? _selectedFile() {
     for (final file in widget.data.recentFiles) {
-      if (selectedSources.contains(file.id) && file.id.trim().isNotEmpty) {
+      if (selectedSources.contains(file.id) && _isBaseForceReadySource(file)) {
         return file;
       }
     }
     return null;
   }
 
+  DriveFile? _fileById(String id) {
+    for (final file in widget.data.recentFiles) {
+      if (file.id == id) return file;
+    }
+    return null;
+  }
+
+  void _toggleSourceForGeneration(String id) {
+    final file = _fileById(id);
+    if (file == null) return;
+    if (!_isBaseForceReadySource(file)) {
+      setState(() => selectedSources.remove(id));
+      _toast(_baseForceSourceBlockedMessage(file));
+      return;
+    }
+    setState(() {
+      if (selectedSources.contains(id)) {
+        selectedSources.remove(id);
+      } else {
+        selectedSources.add(id);
+      }
+    });
+  }
+
+  int? _generationCount(GeneratedKind kind) {
+    if (kind == GeneratedKind.flashcard) {
+      return flashcardCount.clamp(1, 100);
+    }
+    return _baseForceCount(kind);
+  }
+
+  String? _qualityTierFor(GeneratedKind kind) {
+    if (kind != GeneratedKind.flashcard) return null;
+    return switch (flashcardDifficulty) {
+      'Kolay' => 'economy',
+      'Zor' => 'premium',
+      _ => 'standard',
+    };
+  }
+
   Future<void> _startGeneration(GeneratedKind kind) async {
     final file = _selectedFile();
     if (file == null) {
-      _toast('Üretim için önce Drive’dan bir kaynak seçin.');
+      _toast(
+        selectedSources.isEmpty
+            ? 'Üretim için önce Drive’dan hazır bir kaynak seçin.'
+            : 'Seçili kaynak üretime hazır değil. Hazır ve 0 KB olmayan bir PDF seçin.',
+      );
       _open(BaseForceView.sourcePicker);
       return;
     }
-    if (file.status != DriveItemStatus.completed) {
-      _toast('Seçilen dosya henüz işlenmeye hazır değil.');
+    if (!_isBaseForceReadySource(file)) {
+      _toast(_baseForceSourceBlockedMessage(file));
       return;
     }
 
@@ -284,7 +332,8 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
       final createResponse = await _api.createGenerationJob(
         fileId: file.id,
         jobType: jobType,
-        count: _baseForceCount(kind),
+        count: _generationCount(kind),
+        qualityTier: _qualityTierFor(kind),
       );
       final data = createResponse['data'];
       final jobId = data is Map ? data['jobId']?.toString().trim() ?? '' : '';
@@ -355,9 +404,11 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         final message = data is Map
             ? data['errorMessage']?.toString()
             : 'AI üretimi başarısız oldu.';
-        throw StateError(message == null || message.trim().isEmpty
-            ? 'AI üretimi başarısız oldu.'
-            : message);
+        throw StateError(
+          message == null || message.trim().isEmpty
+              ? 'AI üretimi başarısız oldu.'
+              : message,
+        );
       }
       if (mounted) {
         _updateJob(
@@ -368,7 +419,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
       }
       await Future<void>.delayed(const Duration(seconds: 2));
     }
-    throw StateError('AI üretimi zaman aşımına uğradı. Kuyruktan tekrar deneyin.');
+    throw StateError(
+      'AI üretimi zaman aşımına uğradı. Kuyruktan tekrar deneyin.',
+    );
   }
 
   void _updateJob(
@@ -437,15 +490,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
             selectedSources: selectedSources,
             onSearch: widget.onSearch,
             onBack: _backToHome,
-            onToggleSource: (id) {
-              setState(() {
-                if (selectedSources.contains(id)) {
-                  selectedSources.remove(id);
-                } else {
-                  selectedSources.add(id);
-                }
-              });
-            },
+            onToggleSource: _toggleSourceForGeneration,
             onContinue: () => _open(switch (selectedFactory) {
               'question' => BaseForceView.questionFactory,
               'summary' => BaseForceView.summaryFactory,
@@ -468,10 +513,8 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
             addHints: flashcardAddHints,
             onStyleChanged: (v) => setState(() => flashcardStyle = v),
             onCountChanged: (v) => setState(() => flashcardCount = v),
-            onDifficultyChanged: (v) =>
-                setState(() => flashcardDifficulty = v),
-            onExtractKeyChanged: (v) =>
-                setState(() => flashcardExtractKey = v),
+            onDifficultyChanged: (v) => setState(() => flashcardDifficulty = v),
+            onExtractKeyChanged: (v) => setState(() => flashcardExtractKey = v),
             onAddHintsChanged: (v) => setState(() => flashcardAddHints = v),
             onGenerate: () => _startGeneration(GeneratedKind.flashcard),
             onSavePreview: _honestToast,
@@ -507,11 +550,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
             checklist: summaryChecklist,
             onLengthChanged: (v) => setState(() => summaryLength = v),
             onFocusChanged: (v) => setState(() => summaryFocus = v),
-            onMarkTermsChanged: (v) =>
-                setState(() => summaryMarkTerms = v),
+            onMarkTermsChanged: (v) => setState(() => summaryMarkTerms = v),
             onToTableChanged: (v) => setState(() => summaryToTable = v),
-            onChecklistChanged: (v) =>
-                setState(() => summaryChecklist = v),
+            onChecklistChanged: (v) => setState(() => summaryChecklist = v),
             onGenerate: () => _startGeneration(GeneratedKind.summary),
           ),
           BaseForceView.algorithmFactory => _AlgorithmFactoryScreen(
@@ -564,9 +605,13 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
             },
             onExport: _copyLatestResult,
             onRegenerate: () => _open(
-              _factoryViewForKind(_latestResult?.kind ?? GeneratedKind.flashcard),
+              _factoryViewForKind(
+                _latestResult?.kind ?? GeneratedKind.flashcard,
+              ),
             ),
-            onEdit: () => _toast('Düzenleme entegrasyonu bağlı değil; yeni sürüm için Yeniden Üret kullanın.'),
+            onEdit: () => _toast(
+              'Düzenleme entegrasyonu bağlı değil; yeni sürüm için Yeniden Üret kullanın.',
+            ),
           ),
           BaseForceView.allGenerations => _AllGenerationsScreen(
             data: widget.data,
@@ -660,6 +705,73 @@ String _baseForceJobType(GeneratedKind kind) {
   };
 }
 
+bool _isBaseForceReadySource(DriveFile file) {
+  return file.id.trim().isNotEmpty &&
+      file.status == DriveItemStatus.completed &&
+      !_isZeroSizeLabel(file.sizeLabel);
+}
+
+bool _isZeroSizeLabel(String label) {
+  final normalized = label.trim().toLowerCase().replaceAll(',', '.');
+  if (normalized.isEmpty) return true;
+  if (normalized == '0' || normalized == '0 b' || normalized == '0 byte') {
+    return true;
+  }
+  final match = RegExp(
+    r'^([0-9]+(?:\.[0-9]+)?)\s*([a-zçğıöşü]*)$',
+  ).firstMatch(normalized);
+  if (match == null) return false;
+  final value = double.tryParse(match.group(1) ?? '');
+  return value != null && value <= 0;
+}
+
+String _baseForceSourceBlockedMessage(DriveFile file) {
+  return '${file.title}: ${_baseForceSourceBlockedReason(file)}';
+}
+
+String _baseForceSourceBlockedReason(DriveFile file) {
+  if (file.id.trim().isEmpty) return 'Kaynak kimliği eksik.';
+  if (_isZeroSizeLabel(file.sizeLabel)) {
+    return '0 KB kaynaklarla üretim başlatılamaz.';
+  }
+  return switch (file.status) {
+    DriveItemStatus.completed => 'Bu kaynak üretime hazır değil.',
+    DriveItemStatus.processing => 'Bu dosya henüz işleniyor.',
+    DriveItemStatus.uploading => 'Bu dosyanın yüklemesi sürüyor.',
+    DriveItemStatus.failed => 'Bu dosyada işleme hatası var.',
+    DriveItemStatus.draft => 'Taslak kaynaklarla üretim başlatılamaz.',
+  };
+}
+
+String _baseForceReadyLabel(DriveFile file) {
+  if (_isBaseForceReadySource(file)) return 'Hazır';
+  if (_isZeroSizeLabel(file.sizeLabel)) return '0 KB';
+  return switch (file.status) {
+    DriveItemStatus.completed => 'Uygun değil',
+    DriveItemStatus.processing => 'İşleniyor',
+    DriveItemStatus.uploading => 'Yükleniyor',
+    DriveItemStatus.failed => 'Hata',
+    DriveItemStatus.draft => 'Taslak',
+  };
+}
+
+_BFSource _bfSourceFromFile(DriveFile file, {String time = 'Az önce'}) {
+  final ready = _isBaseForceReadySource(file);
+  return _BFSource(
+    id: file.id,
+    name: file.title,
+    kind: file.kind,
+    size: file.sizeLabel,
+    pages: file.pageLabel,
+    subject: file.courseTitle,
+    time: time,
+    status: file.status,
+    enabled: ready,
+    suitabilityLabel: _baseForceReadyLabel(file),
+    blockedReason: ready ? null : _baseForceSourceBlockedReason(file),
+  );
+}
+
 int? _baseForceCount(GeneratedKind kind) {
   return switch (kind) {
     GeneratedKind.flashcard => 20,
@@ -695,7 +807,14 @@ String _baseForceKindLabel(GeneratedKind kind) {
 int _baseForceContentCount(Object? content) {
   if (content is List) return content.length;
   if (content is Map) {
-    for (final key in const ['cards', 'questions', 'bulletPoints', 'steps', 'rows', 'segments']) {
+    for (final key in const [
+      'cards',
+      'questions',
+      'bulletPoints',
+      'steps',
+      'rows',
+      'segments',
+    ]) {
       final value = content[key];
       if (value is List) return value.length;
     }
@@ -729,10 +848,12 @@ String _plainTextValue(Object? value) {
   }
   if (value is Map) {
     if (value.isEmpty) return 'Sonuç içeriği boş.';
-    return value.entries.map((entry) {
-      final key = entry.key.toString();
-      return '$key: ${_plainTextValue(entry.value)}';
-    }).join('\n');
+    return value.entries
+        .map((entry) {
+          final key = entry.key.toString();
+          return '$key: ${_plainTextValue(entry.value)}';
+        })
+        .join('\n');
   }
   final text = value.toString().trim();
   return text.isEmpty ? 'Sonuç içeriği boş.' : text;
@@ -743,10 +864,24 @@ String _friendlyBaseForceError(Object error) {
   final text = raw
       .replaceFirst('Bad state: ', '')
       .replaceFirst('Exception: ', '')
+      .replaceFirst('FunctionException', '')
+      .replaceFirst('FunctionsException', '')
       .trim();
   if (text.isEmpty) return 'AI üretimi tamamlanamadı. Lütfen tekrar deneyin.';
   if (text.contains('SourceBase Supabase client is not configured')) {
     return 'Oturum bağlantısı hazır değil. Lütfen tekrar giriş yapın.';
+  }
+  if (text.contains('INSUFFICIENT_MC') ||
+      text.toLowerCase().contains('yetersiz medasicoin')) {
+    return 'MedasiCoin bakiyeniz bu üretim için yeterli değil.';
+  }
+  if (text.contains('SOURCE_TEXT_REQUIRED')) {
+    return 'Bu kaynakta üretim için okunabilir içerik yok. Başka bir hazır PDF seçin.';
+  }
+  if (text.contains('VERTEX_AUTH_FAILED') ||
+      text.contains('VERTEX_UPSTREAM_ERROR') ||
+      text.contains('MODEL_NOT_FOUND')) {
+    return 'AI servisi şu anda yanıt veremiyor. Biraz sonra tekrar deneyin.';
   }
   return text;
 }
@@ -784,7 +919,9 @@ class _BaseForcePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.sizeOf(context).width < 600;
-    final horizontalPadding = MediaQuery.sizeOf(context).width < 390 ? 16.0 : 32.0;
+    final horizontalPadding = MediaQuery.sizeOf(context).width < 390
+        ? 16.0
+        : 32.0;
     final topPadding = MediaQuery.viewPaddingOf(context).top + 12;
     final bottomPadding = isMobile
         ? SourceBaseBottomNav.scrollEndPadding(context)
@@ -900,7 +1037,10 @@ class _BaseForceTopBar extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    if (onBack != null) ...[backButton, const SizedBox(width: 6)],
+                    if (onBack != null) ...[
+                      backButton,
+                      const SizedBox(width: 6),
+                    ],
                     const Flexible(child: SourceBaseBrand(compact: true)),
                     const Spacer(),
                     actions,
@@ -1435,22 +1575,14 @@ class _BaseForceHome extends StatelessWidget {
               ? const _EmptyBaseForceState(
                   icon: Icons.drive_folder_upload_outlined,
                   title: 'Drive kaynağı yok',
-                  message: 'Üretim başlatmak için Drive’a PDF, PPTX veya DOCX kaynak ekleyin.',
+                  message:
+                      'Üretim başlatmak için Drive’a PDF, PPTX veya DOCX kaynak ekleyin.',
                 )
               : Column(
                   children: [
                     for (final file in data.recentFiles.take(3))
                       _RecentSourceRow(
-                        source: _BFSource(
-                          id: file.id,
-                          name: file.title,
-                          kind: file.kind,
-                          size: file.sizeLabel,
-                          pages: file.pageLabel,
-                          subject: file.courseTitle,
-                          time: 'Az önce',
-                          warning: false,
-                        ),
+                        source: _bfSourceFromFile(file),
                         onTap: onOpenSources,
                       ),
                   ],
@@ -1466,7 +1598,8 @@ class _BaseForceHome extends StatelessWidget {
             child: _EmptyBaseForceState(
               icon: Icons.auto_awesome_rounded,
               title: 'Henüz üretim yok',
-              message: 'Bir kaynak seçip üretim fabrikalarından birini başlatın.',
+              message:
+                  'Bir kaynak seçip üretim fabrikalarından birini başlatın.',
             ),
           )
         else
@@ -1514,7 +1647,8 @@ class _SourcePickerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _BaseForcePage(
       title: 'Kaynak Seç',
-      subtitle: 'Drive\u2019daki dosyalar\u0131n\u0131 se\xE7 veya yeni y\xFCkle.',
+      subtitle:
+          'Drive\u2019daki dosyalar\u0131n\u0131 se\xE7 veya yeni y\xFCkle.',
       onSearch: onSearch,
       onBack: onBack,
       heroTight: true,
@@ -1590,22 +1724,14 @@ class _SourcePickerScreen extends StatelessWidget {
               ? const _EmptyBaseForceState(
                   icon: Icons.folder_off_outlined,
                   title: 'Seçilebilir dosya yok',
-                  message: 'Yeni Yükle ile Drive’a kaynak ekledikten sonra üretim başlatabilirsiniz.',
+                  message:
+                      'Yeni Yükle ile Drive’a kaynak ekledikten sonra üretim başlatabilirsiniz.',
                 )
               : Column(
                   children: [
                     for (final file in data.recentFiles)
                       _SourceSelectRow(
-                        source: _BFSource(
-                          id: file.id,
-                          name: file.title,
-                          kind: file.kind,
-                          size: file.sizeLabel,
-                          pages: file.pageLabel,
-                          subject: file.courseTitle,
-                          time: 'Az önce',
-                          warning: false,
-                        ),
+                        source: _bfSourceFromFile(file),
                         selected: selectedSources.contains(file.id),
                         onTap: () => onToggleSource(file.id),
                       ),
@@ -1667,9 +1793,21 @@ class _FlashcardFactoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DriveFile? readyFile;
+    for (final file in data.recentFiles) {
+      if (selectedSources.contains(file.id) && _isBaseForceReadySource(file)) {
+        readyFile = file;
+        break;
+      }
+    }
+    final canGenerate = readyFile != null;
+    final sourceStatus = readyFile == null
+        ? 'Hazır kaynak seçilmedi'
+        : '${readyFile.title} • ${readyFile.sizeLabel} • ${_baseForceReadyLabel(readyFile)}';
     return _BaseForcePage(
       title: 'Flashcard Fabrikas\u0131',
-      subtitle: 'Kaynaklar\u0131ndan ak\u0131ll\u0131 flashcard\u2019lar \xFCret.',
+      subtitle:
+          'Kaynaklar\u0131ndan ak\u0131ll\u0131 flashcard\u2019lar \xFCret.',
       onSearch: onSearch,
       onBack: onBack,
       art: _BaseForceArtKind.cardSet,
@@ -1717,7 +1855,8 @@ class _FlashcardFactoryScreen extends StatelessWidget {
                             label: 'H\u0131zl\u0131 Tekrar',
                             icon: Icons.sync_rounded,
                             selected: cardStyle == 'H\u0131zl\u0131 Tekrar',
-                            onTap: () => onStyleChanged('H\u0131zl\u0131 Tekrar'),
+                            onTap: () =>
+                                onStyleChanged('H\u0131zl\u0131 Tekrar'),
                           ),
                         ),
                       ],
@@ -1820,11 +1959,11 @@ class _FlashcardFactoryScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 18),
-        const _ProductionSummary(
+        _ProductionSummary(
           items: [
             _SummaryItemData(
               Icons.style_rounded,
-              '50',
+              '$cardCount',
               'Tahmini Kart',
               AppColors.blue,
             ),
@@ -1835,25 +1974,25 @@ class _FlashcardFactoryScreen extends StatelessWidget {
               AppColors.green,
             ),
             _SummaryItemData(
-              Icons.schedule_rounded,
-              '~8 dk',
-              'Tahmini Süre',
-              AppColors.purple,
+              Icons.payments_outlined,
+              'Backend',
+              'MC hesaplar',
+              AppColors.orange,
             ),
             _SummaryItemData(
               Icons.auto_awesome_rounded,
-              'AI Destekli',
-              'Akıllı Üretim',
+              sourceStatus,
+              'Seçili Kaynak',
               AppColors.purple,
             ),
           ],
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: 'Flashcard Üret',
+          label: canGenerate ? 'Flashcard Üret' : 'Hazır Kaynak Seç',
           icon: Icons.auto_awesome_rounded,
           height: 58,
-          onTap: onGenerate,
+          onTap: canGenerate ? onGenerate : null,
         ),
       ],
     );
@@ -1943,7 +2082,12 @@ class _QuestionFactoryScreen extends StatelessWidget {
               _ResponsiveGrid(
                 minItemWidth: 120,
                 children: [
-                  for (final value in const ['Kolay', 'Orta', 'Zor', '\xC7ok Zor'])
+                  for (final value in const [
+                    'Kolay',
+                    'Orta',
+                    'Zor',
+                    '\xC7ok Zor',
+                  ])
                     _SegmentButton(
                       label: value,
                       selected: selectedDifficulty == value,
@@ -2199,7 +2343,10 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('\xC7\u0131kt\u0131 Ayarlar\u0131', style: _titleStyle),
+              const Text(
+                '\xC7\u0131kt\u0131 Ayarlar\u0131',
+                style: _titleStyle,
+              ),
               const SizedBox(height: 16),
               _SettingGridRow(
                 label: '\xC7\u0131kt\u0131 Modu',
@@ -2350,24 +2497,16 @@ class _ComparisonFactoryScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Seçilen Kaynaklar (${selectedFiles.length})', style: _titleStyle),
+              Text(
+                'Seçilen Kaynaklar (${selectedFiles.length})',
+                style: _titleStyle,
+              ),
               const SizedBox(height: 12),
               if (selectedFiles.isEmpty)
                 _SourceRequiredNotice(onPickSources: onPickSources)
               else
                 for (final file in selectedFiles)
-                  _ComparisonSourceLine(
-                    source: _BFSource(
-                      id: file.id,
-                      name: file.title,
-                      kind: file.kind,
-                      size: file.sizeLabel,
-                      pages: file.pageLabel,
-                      subject: file.courseTitle,
-                      time: 'Az önce',
-                      warning: false,
-                    ),
-                  ),
+                  _ComparisonSourceLine(source: _bfSourceFromFile(file)),
             ],
           ),
         ),
@@ -2535,14 +2674,18 @@ class _QueueScreen extends StatelessWidget {
           }).toList();
 
     final runningCount = jobs
-        .where((job) =>
-            job.status == _JobUiStatus.pending ||
-            job.status == _JobUiStatus.running)
+        .where(
+          (job) =>
+              job.status == _JobUiStatus.pending ||
+              job.status == _JobUiStatus.running,
+        )
         .length;
-    final completedCount =
-        jobs.where((job) => job.status == _JobUiStatus.completed).length;
-    final failedCount =
-        jobs.where((job) => job.status == _JobUiStatus.failed).length;
+    final completedCount = jobs
+        .where((job) => job.status == _JobUiStatus.completed)
+        .length;
+    final failedCount = jobs
+        .where((job) => job.status == _JobUiStatus.failed)
+        .length;
 
     return _BaseForcePage(
       title: '\xDcretim Kuyru\u011Fu',
@@ -2613,7 +2756,8 @@ class _QueueScreen extends StatelessWidget {
             child: _EmptyBaseForceState(
               icon: Icons.pending_actions_rounded,
               title: 'Kuyruk boş',
-              message: 'Üretim başlatıldığında pending, işleniyor, tamamlandı ve hata durumları burada görünür.',
+              message:
+                  'Üretim başlatıldığında pending, işleniyor, tamamlandı ve hata durumları burada görünür.',
             ),
           )
         else
@@ -2664,7 +2808,8 @@ class _FlashcardResultsScreen extends StatelessWidget {
               ? const _EmptyBaseForceState(
                   icon: Icons.auto_awesome_rounded,
                   title: 'Sonuç bekleniyor',
-                  message: 'Bir üretim fabrikasından içerik üretip görüntülemek için Üret butonuna basın.',
+                  message:
+                      'Bir üretim fabrikasından içerik üretip görüntülemek için Üret butonuna basın.',
                 )
               : _GeneratedContentView(result: current),
         ),
@@ -2680,7 +2825,9 @@ class _FlashcardResultsScreen extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 16),
-        _SectionHeader(title: current == null ? 'Sonraki Adım' : 'Hızlı Aksiyonlar'),
+        _SectionHeader(
+          title: current == null ? 'Sonraki Adım' : 'Hızlı Aksiyonlar',
+        ),
         if (current == null)
           PrimaryGradientButton(
             label: 'Yeniden Üretime Git',
@@ -2745,7 +2892,8 @@ class _GeneratedContentView extends StatelessWidget {
       return const _EmptyBaseForceState(
         icon: Icons.warning_amber_rounded,
         title: 'Boş içerik döndü',
-        message: 'AI işi tamamlandı ancak görüntülenecek içerik bulunamadı. Yeniden üretmeyi deneyin.',
+        message:
+            'AI işi tamamlandı ancak görüntülenecek içerik bulunamadı. Yeniden üretmeyi deneyin.',
       );
     }
     if (content is List) {
@@ -2897,10 +3045,7 @@ class _GeneratedValue extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final entry in map.entries)
-            _GeneratedKeyValue(
-              label: entry.key.toString(),
-              value: entry.value,
-            ),
+            _GeneratedKeyValue(label: entry.key.toString(), value: entry.value),
         ],
       );
     }
@@ -2957,33 +3102,34 @@ class _AllGenerationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allGenerations = data.recentFiles
-        .expand(
-          (file) => file.generated.map(
-            (gen) => _GenerationRowData(
-              title: gen.title,
-              source: file.title,
-              kind: _baseForceKindLabel(gen.kind),
-              count: gen.detail,
-              time: gen.updatedLabel,
-            ),
-          ),
-        )
-        .toList()
-      ..insertAll(
-        0,
-        jobs
-            .where((job) => job.status == _JobUiStatus.completed)
-            .map(
-              (job) => _GenerationRowData(
-                title: job.title,
-                source: job.source.title,
-                kind: _baseForceKindLabel(job.kind),
-                count: '${_baseForceContentCount(job.result?.content)} öğe',
-                time: 'Bugün',
+    final allGenerations =
+        data.recentFiles
+            .expand(
+              (file) => file.generated.map(
+                (gen) => _GenerationRowData(
+                  title: gen.title,
+                  source: file.title,
+                  kind: _baseForceKindLabel(gen.kind),
+                  count: gen.detail,
+                  time: gen.updatedLabel,
+                ),
               ),
-            ),
-      );
+            )
+            .toList()
+          ..insertAll(
+            0,
+            jobs
+                .where((job) => job.status == _JobUiStatus.completed)
+                .map(
+                  (job) => _GenerationRowData(
+                    title: job.title,
+                    source: job.source.title,
+                    kind: _baseForceKindLabel(job.kind),
+                    count: '${_baseForceContentCount(job.result?.content)} öğe',
+                    time: 'Bugün',
+                  ),
+                ),
+          );
 
     final visible = selectedFilter == 'T\xFCm\xFC'
         ? allGenerations
@@ -3046,7 +3192,10 @@ class _AllGenerationsScreen extends StatelessWidget {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: () => _showBaseForceToast(context, 'Sıralama şu anda en yeni üretimlere göre uygulanıyor.'),
+            onPressed: () => _showBaseForceToast(
+              context,
+              'Sıralama şu anda en yeni üretimlere göre uygulanıyor.',
+            ),
             child: const Text(
               'Sırala:  En Yeni ⌄',
               style: TextStyle(
@@ -3062,7 +3211,8 @@ class _AllGenerationsScreen extends StatelessWidget {
             child: _EmptyBaseForceState(
               icon: Icons.collections_bookmark_outlined,
               title: 'Henüz üretim yok',
-              message: 'Bir kaynak seçip üretim başlattığınızda sonuçlar burada listelenir.',
+              message:
+                  'Bir kaynak seçip üretim başlattığınızda sonuçlar burada listelenir.',
             ),
           )
         else
@@ -3742,43 +3892,62 @@ class _SourceSelectRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final enabled = source.enabled;
     return InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            _CheckSquare(selected: selected),
-            const SizedBox(width: 16),
-            FileKindBadge(kind: source.kind, plain: false),
-            const SizedBox(width: 18),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    source.name,
-                    style: const TextStyle(
-                      color: AppColors.navy,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
+        child: Opacity(
+          opacity: enabled ? 1 : .58,
+          child: Row(
+            children: [
+              _CheckSquare(selected: selected && enabled, enabled: enabled),
+              const SizedBox(width: 16),
+              FileKindBadge(kind: source.kind, plain: false),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      source.name,
+                      style: const TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${source.size}  •  ${source.pages}',
-                    style: const TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 14,
+                    const SizedBox(height: 4),
+                    Text(
+                      '${source.size}  •  ${source.pages}',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                ],
+                    if (source.blockedReason != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        source.blockedReason!,
+                        style: const TextStyle(
+                          color: AppColors.red,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            _SuitabilityPill(warning: source.warning),
-            const SizedBox(width: 10),
-            const _MoreMenuButton(),
-          ],
+              _SuitabilityPill(
+                label: source.suitabilityLabel,
+                status: source.status,
+                warning: !enabled,
+              ),
+              const SizedBox(width: 10),
+              const _MoreMenuButton(),
+            ],
+          ),
         ),
       ),
     );
@@ -3786,22 +3955,25 @@ class _SourceSelectRow extends StatelessWidget {
 }
 
 class _CheckSquare extends StatelessWidget {
-  const _CheckSquare({required this.selected});
+  const _CheckSquare({required this.selected, this.enabled = true});
 
   final bool selected;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = selected
+        ? AppColors.blue
+        : enabled
+        ? const Color(0xFFB8C5D8)
+        : AppColors.line;
     return Container(
       width: 30,
       height: 30,
       decoration: BoxDecoration(
         color: selected ? AppColors.blue : Colors.white,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: selected ? AppColors.blue : const Color(0xFFB8C5D8),
-          width: 2,
-        ),
+        border: Border.all(color: borderColor, width: 2),
       ),
       child: selected
           ? const Icon(Icons.check_rounded, color: Colors.white, size: 22)
@@ -3811,16 +3983,33 @@ class _CheckSquare extends StatelessWidget {
 }
 
 class _SuitabilityPill extends StatelessWidget {
-  const _SuitabilityPill({this.warning = false});
+  const _SuitabilityPill({
+    this.label,
+    this.status = DriveItemStatus.completed,
+    this.warning = false,
+  });
 
+  final String? label;
+  final DriveItemStatus status;
   final bool warning;
 
   @override
   Widget build(BuildContext context) {
+    final effectiveLabel = label ?? (warning ? 'Büyük Boyut' : 'Uygun');
+    final color = warning
+        ? status == DriveItemStatus.failed
+              ? AppColors.red
+              : const Color(0xFFE69A00)
+        : AppColors.green;
+    final bg = warning
+        ? status == DriveItemStatus.failed
+              ? AppColors.redBg
+              : const Color(0xFFFFF2D8)
+        : AppColors.greenBg;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: warning ? const Color(0xFFFFF2D8) : AppColors.greenBg,
+        color: bg,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -3828,14 +4017,14 @@ class _SuitabilityPill extends StatelessWidget {
         children: [
           Icon(
             warning ? Icons.error_rounded : Icons.check_circle_rounded,
-            color: warning ? const Color(0xFFE69A00) : AppColors.green,
+            color: color,
             size: 17,
           ),
           const SizedBox(width: 6),
           Text(
-            warning ? 'Büyük Boyut' : 'Uygun',
+            effectiveLabel,
             style: TextStyle(
-              color: warning ? const Color(0xFFD28000) : AppColors.green,
+              color: color,
               fontSize: 14,
               fontWeight: FontWeight.w800,
             ),
@@ -3907,19 +4096,12 @@ class _SelectedSourcesTray extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = data.recentFiles
-        .where((file) => selectedSources.contains(file.id))
-        .map(
-          (file) => _BFSource(
-            id: file.id,
-            name: file.title,
-            kind: file.kind,
-            size: file.sizeLabel,
-            pages: file.pageLabel,
-            subject: file.courseTitle,
-            time: 'Az önce',
-            warning: false,
-          ),
+        .where(
+          (file) =>
+              selectedSources.contains(file.id) &&
+              _isBaseForceReadySource(file),
         )
+        .map((file) => _bfSourceFromFile(file))
         .toList();
     return _BasePanel(
       padding: const EdgeInsets.all(18),
@@ -4052,7 +4234,11 @@ class _SourcesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final files = data.recentFiles
-        .where((file) => selectedSources.contains(file.id))
+        .where(
+          (file) =>
+              selectedSources.contains(file.id) &&
+              _isBaseForceReadySource(file),
+        )
         .toList();
     return _BasePanel(
       child: Column(
@@ -4070,16 +4256,7 @@ class _SourcesPanel extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _CompactSourceTile(
-                  source: _BFSource(
-                    id: file.id,
-                    name: file.title,
-                    kind: file.kind,
-                    size: file.sizeLabel,
-                    pages: file.pageLabel,
-                    subject: file.courseTitle,
-                    time: 'Az önce',
-                    warning: false,
-                  ),
+                  source: _bfSourceFromFile(file),
                   selected: true,
                 ),
               ),
@@ -4156,7 +4333,11 @@ class _SelectedSourceChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sources = data.recentFiles
-        .where((file) => selectedSources.contains(file.id))
+        .where(
+          (file) =>
+              selectedSources.contains(file.id) &&
+              _isBaseForceReadySource(file),
+        )
         .take(includeThird ? 3 : 2)
         .toList();
     return Column(
@@ -4173,16 +4354,7 @@ class _SelectedSourceChips extends StatelessWidget {
             children: [
               for (final file in sources)
                 _SourceChipCard(
-                  source: _BFSource(
-                    id: file.id,
-                    name: file.title,
-                    kind: file.kind,
-                    size: file.sizeLabel,
-                    pages: file.pageLabel,
-                    subject: file.courseTitle,
-                    time: 'Az önce',
-                    warning: false,
-                  ),
+                  source: _bfSourceFromFile(file),
                   onTap: onPickSources,
                 ),
               _DashedAddButton(onTap: onPickSources),
@@ -4267,7 +4439,7 @@ class _CompactSourceTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  source.size,
+                  '${source.size} • ${source.suitabilityLabel}',
                   style: const TextStyle(color: AppColors.muted, fontSize: 13),
                 ),
               ],
@@ -4445,7 +4617,12 @@ class _SegmentButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap ?? () => _showBaseForceToast(context, 'Bu \xF6zellik hen\xFCz haz\u0131r de\u011Fil.'),
+      onTap:
+          onTap ??
+          () => _showBaseForceToast(
+            context,
+            'Bu \xF6zellik hen\xFCz haz\u0131r de\u011Fil.',
+          ),
       borderRadius: BorderRadius.circular(9),
       child: Container(
         height: 50,
@@ -4657,7 +4834,11 @@ class _DifficultyChipState extends State<_DifficultyChip> {
 }
 
 class _ToggleLine extends StatefulWidget {
-  const _ToggleLine({required this.label, this.initialValue = true, this.onChanged});
+  const _ToggleLine({
+    required this.label,
+    this.initialValue = true,
+    this.onChanged,
+  });
 
   final String label;
   final bool initialValue;
@@ -4917,7 +5098,10 @@ class _TagChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => _showBaseForceToast(context, 'Bu ayar üretim isteğine backend desteği geldikten sonra bağlanacak.'),
+      onTap: () => _showBaseForceToast(
+        context,
+        'Bu ayar üretim isteğine backend desteği geldikten sonra bağlanacak.',
+      ),
       borderRadius: BorderRadius.circular(18),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -5107,7 +5291,10 @@ class _ExplanationPreview extends StatelessWidget {
 }
 
 class _SummaryOptionPanel extends StatelessWidget {
-  const _SummaryOptionPanel({required this.selectedLength, required this.onLengthChanged});
+  const _SummaryOptionPanel({
+    required this.selectedLength,
+    required this.onLengthChanged,
+  });
 
   final String selectedLength;
   final ValueChanged<String> onLengthChanged;
@@ -5118,7 +5305,10 @@ class _SummaryOptionPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _PanelTitle(icon: Icons.description_outlined, title: '\xD6zet Uzunlu\u011Fu'),
+          const _PanelTitle(
+            icon: Icons.description_outlined,
+            title: '\xD6zet Uzunlu\u011Fu',
+          ),
           const SizedBox(height: 16),
           _RadioOption(
             title: '1 sayfa',
@@ -5145,7 +5335,10 @@ class _SummaryOptionPanel extends StatelessWidget {
 }
 
 class _FocusOptionPanel extends StatelessWidget {
-  const _FocusOptionPanel({required this.selectedFocus, required this.onFocusChanged});
+  const _FocusOptionPanel({
+    required this.selectedFocus,
+    required this.onFocusChanged,
+  });
 
   final String selectedFocus;
   final ValueChanged<String> onFocusChanged;
@@ -5156,13 +5349,18 @@ class _FocusOptionPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _PanelTitle(icon: Icons.track_changes_rounded, title: 'Odak Modu'),
+          const _PanelTitle(
+            icon: Icons.track_changes_rounded,
+            title: 'Odak Modu',
+          ),
           const SizedBox(height: 16),
           _RadioOption(
             title: 'Y\xFCksek Olas\u0131l\u0131kl\u0131 Sorular',
             subtitle: '\xC7\u0131kma ihtimali y\xFCksek konular',
-            selected: selectedFocus == 'Y\xFCksek Olas\u0131l\u0131kl\u0131 Sorular',
-            onTap: (selected) => onFocusChanged('Y\xFCksek Olas\u0131l\u0131kl\u0131 Sorular'),
+            selected:
+                selectedFocus == 'Y\xFCksek Olas\u0131l\u0131kl\u0131 Sorular',
+            onTap: (selected) =>
+                onFocusChanged('Y\xFCksek Olas\u0131l\u0131kl\u0131 Sorular'),
           ),
           _RadioOption(
             title: 'Kritik Noktalar',
@@ -5205,7 +5403,10 @@ class _HighlightOptionPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _PanelTitle(icon: Icons.edit_outlined, title: 'Vurgu Se\xE7enekleri'),
+          const _PanelTitle(
+            icon: Icons.edit_outlined,
+            title: 'Vurgu Se\xE7enekleri',
+          ),
           const SizedBox(height: 22),
           _ToggleLine(
             label: 'Anahtar terimleri i\u015Faretle',
@@ -5914,8 +6115,10 @@ class _ComparisonSourceLine extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Kaynağı kaldır',
-            onPressed: () =>
-                _showBaseForceToast(context, 'Kaynağı değiştirmek için kaynak seçimi ekranını açın.'),
+            onPressed: () => _showBaseForceToast(
+              context,
+              'Kaynağı değiştirmek için kaynak seçimi ekranını açın.',
+            ),
             icon: const Icon(Icons.close_rounded, color: AppColors.navy),
             visualDensity: VisualDensity.compact,
           ),
@@ -5950,7 +6153,10 @@ class _TopicButtonState extends State<_TopicButton> {
     return InkWell(
       onTap: () {
         if (widget.label.isEmpty) {
-          _showBaseForceToast(context, 'Konu listesi backend desteği geldikten sonra genişletilecek.');
+          _showBaseForceToast(
+            context,
+            'Konu listesi backend desteği geldikten sonra genişletilecek.',
+          );
           return;
         }
         setState(() => selected = !selected);
@@ -6043,7 +6249,10 @@ class _DropdownBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => _showBaseForceToast(context, 'Bu ayar üretim isteğine backend desteği geldikten sonra bağlanacak.'),
+      onTap: () => _showBaseForceToast(
+        context,
+        'Bu ayar üretim isteğine backend desteği geldikten sonra bağlanacak.',
+      ),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -6319,30 +6528,30 @@ class _QueueFilter extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(
-      height: 54,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.blue : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: selected ? AppColors.blue : AppColors.line),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (dot != null) ...[
-            CircleAvatar(radius: 5, backgroundColor: dot),
-            const SizedBox(width: 10),
-          ],
-          Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.white : AppColors.navy,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
+        height: 54,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.blue : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: selected ? AppColors.blue : AppColors.line),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (dot != null) ...[
+              CircleAvatar(radius: 5, backgroundColor: dot),
+              const SizedBox(width: 10),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : AppColors.navy,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -6571,12 +6780,6 @@ class _QueueRow extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
 
 class _QuickResultAction extends StatelessWidget {
   const _QuickResultAction({
@@ -6927,7 +7130,10 @@ class _MoreMenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: 'Diğer işlemler',
-      onPressed: () => _showBaseForceToast(context, 'Ek üretim işlemleri backend desteği geldikten sonra bağlanacak.'),
+      onPressed: () => _showBaseForceToast(
+        context,
+        'Ek üretim işlemleri backend desteği geldikten sonra bağlanacak.',
+      ),
       icon: Icon(Icons.more_vert_rounded, color: color),
       visualDensity: VisualDensity.compact,
     );
@@ -6953,7 +7159,10 @@ class _BFSource {
     required this.pages,
     required this.subject,
     required this.time,
-    this.warning = false,
+    this.status = DriveItemStatus.completed,
+    this.enabled = true,
+    this.suitabilityLabel = 'Uygun',
+    this.blockedReason,
   });
 
   final String id;
@@ -6963,7 +7172,10 @@ class _BFSource {
   final String pages;
   final String subject;
   final String time;
-  final bool warning;
+  final DriveItemStatus status;
+  final bool enabled;
+  final String suitabilityLabel;
+  final String? blockedReason;
 }
 
 class _GenerationRowData {

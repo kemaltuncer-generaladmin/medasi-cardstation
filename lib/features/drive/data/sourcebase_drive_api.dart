@@ -124,9 +124,13 @@ class SourceBaseDriveApi {
     required String fileId,
     required String jobType,
     int? count,
+    String? qualityTier,
   }) {
     final payload = <String, dynamic>{'fileId': fileId, 'jobType': jobType};
     if (count != null) payload['count'] = count;
+    if (qualityTier != null && qualityTier.trim().isNotEmpty) {
+      payload['quality_tier'] = qualityTier.trim();
+    }
     return invoke('create_generation_job', payload: payload);
   }
 

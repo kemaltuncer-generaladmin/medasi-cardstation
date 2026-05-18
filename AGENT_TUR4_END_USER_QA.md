@@ -1,73 +1,86 @@
-# TUR 4 SON KULLANICI QA RAPORU - BACKEND + AI + SECURITY
+# TUR 4 SON KULLANICI QA RAPORU - DRIVE + UPLOAD
 
 ## 1. Test ortamı
 - URL: https://sourcebase.medasi.com.tr
 - Test hesabı: kemal.tuncer@medasi.com.tr
-- Cihaz/viewport: Desktop 1440x900, Tablet 1024x1366, iPhone 14 390x844; ek canlı API testleri HTTP/curl ile
-- Tarayıcı: Google Chrome headless + Playwright persistent context
-- Tarih/saat: 2026-05-18 05:55 +03
+- Cihaz/viewport: Desktop 1440x900, iPhone 14 390x844, tablet 820x1180 temel giriş denemesi
+- Tarayıcı: Google Chrome, Playwright headless
+- Tarih/saat: 2026-05-18 05:51-05:54 +03
 
 ## 2. Son kullanıcı senaryosu
-Kullanıcı SourceBase'e giriş yapıp Drive ana ekranına ulaşmak, ders/bölüm altında kaynak yüklemek, yüklenen kaynaktan AI öğrenme çıktısı üretmek ve Central AI'dan kaynak bağlamıyla yanıt almak istiyor. Backend açısından kritik beklenti: kullanıcı sadece kendi verisini görmeli, upload gerçekten tamamlanmadan dosya başarılı sayılmamalı, AI job ve Central AI canlıda çalışmalı, hata response'u sade kalmalı ve secret/stack trace dönmemeli.
+Kullanıcı Drive'a girip kendi PDF kaynağını yüklemek, bunu ders ve bölüm altında düzenlemek, yüklenen dosyayı listede görmek, dosya detayına girip durumunu anlamak ve hazırsa öğrenme çıktısı üretmek istiyor.
 
 ## 3. Gerçekten denenen akışlar
-- Canlı URL desktop/tablet/iPhone 14 viewportlarında açıldı.
-- Gerçek test hesabıyla canlı login formu dolduruldu ve `Giriş Yap` butonuna basıldı.
-- Login sonrası Drive home ekranı açıldı.
-- Browser Network gözleminde `drive_bootstrap` çağrısı görüldü.
-- Canlı API'de auth olmadan `drive_bootstrap` çağrıldı.
-- Canlı API'de auth ile `create_course`, `create_section`, `create_upload_session`, `complete_upload`, `create_generation_job`, `central_ai_chat`, `delete_course` çağrıldı.
-- Sahte upload senaryosu denendi: `create_upload_session` sonrası GCS PUT yapılmadan `complete_upload` çağrıldı.
-- Gerçek upload senaryosu denendi: `create_upload_session` sonrası signed URL'ye PDF `PUT` denendi, ardından `complete_upload` çağrıldı.
-- CORS preflight canlı API domaininde denendi.
-- Response gövdelerinde stack trace, service role, private key, access/refresh token marker'ları arandı.
+- Canlı login ekranı açıldı, e-posta/şifre ile giriş yapıldı.
+- Drive ana sayfa açıldı; ders listesi, "Ders Oluştur", "Bölüm Ekle", "Koleksiyonlar" ve mevcut son içerikler görüldü.
+- "Ders Oluştur" butonu tıklandı, "Tur 4 QA Ders" girildi ve kaydedildi. `functions/v1/sourcebase` 200 döndü.
+- Yeni ders detayında "Bölüm Ekle" tıklandı, "Tur 4 QA Bölüm" girildi ve kaydedildi. `functions/v1/sourcebase` 200 döndü.
+- Yeni bölüm ekranında "Dosya Yükle" tıklandı. File chooser açıldı.
+- Küçük/geçerli PDF dosyası seçildi: `/Volumes/driveand/tur3_live_qa_valid.pdf`.
+- PDF seçildikten sonra 35 saniye beklendi.
+- Bekleme sonunda bölüm ekranı hâlâ "Bu bölümde henüz dosya yok" gösterdi.
+- Network gözleminde PDF seçimi sonrasında `create_upload_session`, storage upload veya `complete_upload` çağrısı görülmedi.
+- Mevcut canlı dosya için "Tur 3 Live QA Backend" dersi açıldı, bölüm açıldı, `tur3_live_qa.pdf` dosyasına girildi.
+- Dosya listesinde mevcut dosya `İşleniyor` göründü; dosya detayında aynı dosya `Durum: Hata` olarak göründü.
+- Arama ekranı açıldı; `tur3_live_qa` araması önceki testte sonuçsuz kalmıştı. Bu turda arama denemesi sırasında ayrı bir koordinat hatası Google OAuth URL'sine götürdü; arama güvenilir biçimde tamamlanamadı.
+- Koleksiyonlar ekranı açıldı; üretim olmadığı için sayaçlar 0 ve empty state gösterildi.
+- iPhone 14 viewport'ta login başarılı oldu, Drive ana ekranı açıldı.
+- Tablet viewport'ta koordinat tabanlı otomasyon login'i tamamlayamadı; tablet için manuel canlı kontrol gerekir.
 
 ## 4. Çalışanlar
-- Login canlıda başarılı: Auth token endpoint browser ve API testinde HTTP 200 döndü.
-- Desktop/tablet/iPhone 14 viewportlarında kullanıcı login sonrası `#/home` rotasına geçti.
-- Drive home açılıyor; `drive_bootstrap` browser Network'te HTTP 200 döndü.
-- Auth olmadan `drive_bootstrap` doğru şekilde HTTP 401 ve sade JSON hata döndürdü: `UNAUTHORIZED / Oturum gerekli.`
-- Auth ile `create_course` HTTP 200 döndü.
-- Auth ile `create_section` HTTP 200 döndü.
-- Auth ile `create_upload_session` HTTP 200 döndü ve `uploadUrl`, `objectName`, `bucket`, `expiresAt`, `headers`, `metadata` alanlarını verdi.
-- Hata response'larında stack trace, service role, private key, access token veya refresh token marker'ı görülmedi.
-- Login sonrası desktop/tablet/iPhone 14 görünümünde kritik runtime `pageerror` veya failed browser request gözlenmedi.
+- E-posta/şifre login çalışıyor.
+- Drive ana sayfa açılıyor.
+- Ders oluşturma çalışıyor ve oluşturulan ders detayına geçiliyor.
+- Bölüm oluşturma çalışıyor ve oluşturulan bölüm ekranına geçiliyor.
+- Bölüm ekranında empty state anlaşılır.
+- File chooser açılıyor.
+- Mevcut dosya satırından dosya detayına girilebiliyor.
+- Dosya hata durumundayken üretim engelleniyor ve kullanıcıya "dosyayı yeniden yükleyin" mesajı veriliyor.
+- Koleksiyonlar boş durumda yanıltıcı mock göstermiyor; sayaçlar 0.
+- iPhone 14 ana Drive ekranı açılıyor.
 
 ## 5. Kırılanlar
-- Sahte `complete_upload` hâlâ başarısız değil: GCS PUT yapılmadan çağrılan `complete_upload` HTTP 200, `ok: true`, `status: processing_failed` döndü ve `drive_files` kaydı açtı. Bu canlı deploy'da upload doğrulamasının release blocker olarak kırık olduğunu kanıtlıyor.
-- Gerçek upload denemesinde signed URL `PUT` HTTP 403 döndü. Buna rağmen ardından çağrılan `complete_upload` yine HTTP 200, `ok: true`, `status: processing_failed`, `ai_status: failed`, `file_id_present: true` döndü.
-- `create_generation_job` HTTP 500 döndü: `VERTEX_AUTH_FAILED / Vertex AI kimlik doğrulama başarısız.`
-- `central_ai_chat` HTTP 500 döndü: `VERTEX_AUTH_FAILED / Vertex AI kimlik doğrulama başarısız.`
-- `delete_course` cleanup HTTP 500 döndü: `GCS_DELETE_FAILED / Dosya depolama alanından silinemedi.`
-- CORS preflight canlı API domaininde HTTP 200 döndü ama `access-control-allow-origin: *` ve çok geniş method listesi var: `GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS,TRACE,CONNECT`.
+- Küçük PDF seçilince upload gerçekten başlamıyor gibi görünüyor.
+- Upload progress görünmedi.
+- `create_upload_session` network çağrısı görülmedi.
+- Storage upload network çağrısı görülmedi.
+- `complete_upload` network çağrısı görülmedi.
+- Upload sonrası dosya bölüm listesine eklenmedi.
+- Upload başarısızlığı için kullanıcıya hata, retry veya teknik hata kodu gösterilmedi; ekran sessizce empty state'te kaldı.
+- Dosya listesi ve dosya detayı status mapping tutarsız: listede `İşleniyor`, detayda `Durum: Hata`.
+- Arama güvenilir biçimde doğrulanamadı; önceki canlı bulguda mevcut dosya/ders aranmasına rağmen sonuç dönmemişti.
+- Google ile devam et butonu kullanıcıyı 400 `Unsupported provider: provider is not enabled` hatasına götürebiliyor.
+- Tablet viewport login otomasyonla tamamlanamadı; manuel tablet testi gerekli.
 
 ## 6. Release blocker
-- Var/Yok: Var
-- Detay: Kullanıcı SourceBase'in ana amacına ulaşamıyor. Drive açılıyor ama upload güvenliği canlıda kırık: upload yapılmadan dosya kaydı oluşturulabiliyor. Signed upload gerçek PUT 403 verdiği için gerçek dosya yükleme de kullanılamıyor. AI üretim ve Central AI canlıda `VERTEX_AUTH_FAILED` ile 500 dönüyor. Bu, kaynak yükleme ve kaynaktan öğrenme çıktısı üretme vaadini bloke ediyor.
+- Var:
+- Detay: Drive'ın ana vaadi olan "kullanıcı kendi kaynağını yükler ve üretime geçer" canlıda tamamlanamıyor. PDF seçici açılıyor ama upload progress başlamıyor, `create_upload_session`/storage/`complete_upload` çağrıları görünmüyor, dosya listeye yansımıyor ve kullanıcıya hata/retry sunulmuyor. Bu yüzden kullanıcı kendi PDF kaynağını yükleyip üretime hazır hale getiremiyor.
 
 ## 7. Major issue
-- CORS production için makul değil: canlı API `*` origin ve gereksiz geniş method listesi dönüyor.
-- App shell domaini `sourcebase.medasi.com.tr`, canlı API hostu bundle configte `medasi.com.tr`; kullanıcı açısından çalışıyor ama operational/debug açısından tutarsız.
-- `delete_course` GCS silme hatasına takılıp 500 dönüyor; QA verisi ve kullanıcı verisi temizlenemeyebilir.
-- Test hesabında önceki canlı QA'dan kalan hatalı dosya ekranda görünüyor: `tur3_live_qa.pdf. 0 KB. ... Hata.`
+- Liste/detay status tutarsızlığı kullanıcıyı yanıltıyor: aynı dosya listede `İşleniyor`, detayda `Hata`.
+- Upload sessiz başarısız oluyor; kullanıcı ne olduğunu anlayamıyor.
+- Arama akışı mevcut kaynak bulunabilirliği açısından güven vermiyor.
+- Google OAuth butonu canlıda aktif görünüyor ama provider kapalı olduğu için 400 hatası üretiyor.
+- iPhone 14 ekranında Drive açılıyor, ancak alt navigation hero altındaki içeriklerin üzerine çok yaklaşıyor; küçük ekran ergonomisi tekrar kontrol edilmeli.
 
 ## 8. Polish issue
-- Login ekranında ve Drive CTA'da bazı erişilebilir buton metinleri tekrar ediyor: `Giriş Yap Giriş Yap`, `Kaynak Oluştur Kaynak Oluştur`.
-- Chrome console'da login ekranı için DOM uyarısı görüldü; kırmızı runtime hata değil.
-- iPhone 14 görünümünde Drive ilk ekran kullanılabilir, ancak sadece ilk birkaç ders görünüyor; uzun liste ve QA kalıntıları kullanıcı algısını zayıflatıyor.
+- Login ekranında console verbose uyarısı var: password field form içinde değil.
+- Flutter semantics metinlerinde bazı CTA'lar çift okunuyor: "Giriş Yap Giriş Yap", "Dosya Yükle Dosya Yükle", "Kaynak Oluştur Kaynak Oluştur".
+- Tekrarlanan test dersleri ana sayfada çoğalıyor; canlı QA temizliği veya test datası ayrımı yok.
 
 ## 9. Kullanıcı deneyimi kararı
 - Kullanıcı bu alanda amacına ulaşabiliyor mu?
-- Hayır
-- Neden? Kullanıcı giriş yapıp Drive ana ekranını görebiliyor, ancak SourceBase'in asıl değeri olan güvenli dosya yükleme ve AI çıktı üretme canlıda çalışmıyor. Sahte upload başarıya yakın bir state yaratıyor, gerçek PUT 403 veriyor, generation job ve Central AI 500 ile duruyor.
+- Hayır.
+- Neden? Kullanıcı giriş yapabiliyor, Drive'a girebiliyor, ders ve bölüm oluşturabiliyor. Ancak küçük PDF seçildikten sonra upload başlamıyor, progress yok, complete upload yok, dosya listeye eklenmiyor. Kaynak yüklenemediği için dosyadan üretime geçilemiyor.
 
 ## 10. Patch gerekiyor mu?
-- Evet/Hayır: Evet
-- Gerekirse hangi dosyalar: Canlı deploy'a alınması gereken backend patch alanları `supabase/functions/sourcebase/index.ts`, `supabase/functions/sourcebase/actions/ai-generation.ts`, `supabase/functions/sourcebase/services/vertex-ai.ts`, `supabase/functions/_shared/cors.ts`; ayrıca Coolify/Supabase env ve routing ayarları.
-- Patch önceliği: blocker
+- Evet:
+- Gerekirse hangi dosyalar: Drive upload frontend dosyaları (`drive_upload_service_web.dart`, `drive_upload_service_io.dart`, `drive_workspace_screen.dart`, `drive_repository.dart`) ve backend tarafında `create_upload_session` / `complete_upload` canlı log kontrolü.
+- Patch önceliği: blocker.
 
 ## 11. Kanıt / not
-- Console hatası: Login sonrası kritik `pageerror` yok. Console'da Flutter boot debug ve redakte edilen hassas olabilecek verbose DOM satırı dışında kritik hata gözlenmedi.
-- Network hatası: Browser login sonrası `drive_bootstrap` HTTP 200. API kanıtları: sahte `complete_upload` HTTP 200/`ok:true`; real signed `PUT` HTTP 403; real `complete_upload` HTTP 200/`ok:true`; `create_generation_job` HTTP 500 `VERTEX_AUTH_FAILED`; `central_ai_chat` HTTP 500 `VERTEX_AUTH_FAILED`; `delete_course` HTTP 500 `GCS_DELETE_FAILED`; CORS `allow-origin: *`.
-- Ekran gözlemi: Desktop/tablet/iPhone 14 login sonrası Drive home açıldı. Ekranda ders listeleri, `Kaynak Oluştur`, `Ders Oluştur`, `Bölüm Ekle`, `Koleksiyonlar` CTA'ları görünüyor. Tablet görünümünde önceki hatalı upload dosyası `0 KB / Hata` olarak listeleniyor.
-- Manuel test yapılamadıysa nedeni: GUI manuel olarak kullanılmadı; gerçek Chrome headless ile son kullanıcı login/viewport/network testi yapıldı. Dosya seçici üzerinden manuel upload yerine canlı API ile signed upload akışı test edildi. Test sonrası token/session içerebilecek geçici Chrome profilleri ve QA dosyaları silindi.
+- Console hatası: Kritik runtime/page error yakalanmadı. Verbose uyarı: password field form içinde değil. Bir kullanıcı aksiyonunda Google OAuth provider kapalı olduğu için 400 resource error görüldü.
+- Network hatası: Login `auth/v1/token` 200. Ders/bölüm işlemleri `functions/v1/sourcebase` 200. PDF seçimi sonrasında `create_upload_session`, storage upload veya `complete_upload` çağrısı görülmedi. Google OAuth denemesinde `auth/v1/authorize?provider=google` 400 döndü.
+- Ekran gözlemi: "Tur 4 QA Ders" oluşturuldu, "Tur 4 QA Bölüm" oluşturuldu, file chooser açıldı, PDF seçildi, 35 saniye sonra ekran hâlâ "Bu bölümde henüz dosya yok" durumundaydı.
+- Dosya detayı kanıtı: `tur3_live_qa.pdf` listede `İşleniyor`, detayda `Durum: Hata`; üretim bölümü "Dosya işlenemedi. Bu kaynaktan üretim almak için dosyayı yeniden yükleyin." mesajını gösterdi.
+- Manuel test yapılamadıysa nedeni: Testler gerçek canlı URL'de Chrome headless ile yapıldı. Tablet login otomasyonu koordinat nedeniyle tamamlanamadı; tablet için manuel cihaz kontrolü gerekir.

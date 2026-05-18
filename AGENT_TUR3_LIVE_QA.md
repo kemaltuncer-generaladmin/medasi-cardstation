@@ -1,66 +1,69 @@
-# TUR 3 CANLI UX RAPORU - BACKEND + AI + SECURITY
+# TUR 3 CANLI UX RAPORU - DRIVE + UPLOAD
 
 ## 1. Test ortamı
 - URL: https://sourcebase.medasi.com.tr
 - Test hesabı: kemal.tuncer@medasi.com.tr
-- Cihaz/viewport: Desktop 1440x900, Tablet 1024x1366, iPhone 14 390x844; API testleri canlı HTTP/curl ile
-- Tarayıcı: Google Chrome headless/Playwright ile login ekranına kadar; canlı API için curl
-- Tarih/saat: 2026-05-18 05:07 +03
+- Cihaz/viewport: Desktop 1440x900, iPhone 14 390x844, tablet denemesi 820x1180
+- Tarayıcı: Google Chrome via Playwright headless
+- Tarih/saat: 2026-05-18 05:20 +03 civarı
 
 ## 2. Gerçekten denenen akışlar
-- Canlı app shell açıldı: `https://sourcebase.medasi.com.tr` HTTP 200.
-- Desktop/tablet/iPhone 14 viewportlarında login ekranı açıldı.
-- Console/pageerror/network gözlemi login ekranına kadar alındı.
-- Gerçek test hesabıyla Supabase Auth endpointine canlı login denendi: HTTP 200, access token üretildi.
-- Auth olmadan `drive_bootstrap` canlı Edge Function çağrısı denendi.
-- Auth ile `drive_bootstrap` canlı Edge Function çağrısı denendi.
-- Auth ile `create_course`, `create_section`, `create_upload_session` denendi.
-- Signed URL ile gerçek dosya PUT yapılmadan `complete_upload` denendi.
-- Auth ile `create_generation_job` denendi.
-- Auth ile `central_ai_chat` denendi.
-- QA sırasında açılan test course temizlenmeye çalışıldı.
+- Canlı site açıldı; login ekranı render oldu.
+- Test hesabıyla gerçek giriş yapıldı; auth isteği 200 döndü ve Drive ana sayfa açıldı.
+- Drive ana sayfada dersler, son yüklemeler ve koleksiyon empty state gözlendi.
+- "Ders Oluştur" açıldı; boş isim validasyonu görüldü.
+- "Kardiyoloji Test" dersi oluşturuldu; backend function 200 döndü ve ders detayına geçildi.
+- Ders detayında "Bölüm Ekle" açıldı.
+- "Akut Koroner Sendrom" bölümü oluşturuldu; backend function 200 döndü ve bölüm ekranına geçildi.
+- Bölüm ekranında "Dosya Yükle" tıklandı; dosya seçici açıldı.
+- Küçük test PDF seçildi; sonra daha geçerli 13 KB PDF ile ikinci kez denendi.
+- Mevcut "Tur 3 Live QA Backend" dersindeki mevcut PDF satırına girildi; bölüm listesi ve dosya detayı kontrol edildi.
+- Drive arama ekranı açıldı; sonuçsuz arama empty state görüldü.
+- Koleksiyonlar ekranı açıldı; üretim olmadığı durumda empty state ve sayaçlar görüldü.
+- iPhone 14 viewport ile giriş ve Drive ana sayfa görüntülendi.
 
 ## 3. Çalışanlar
-- Login ekranı web/tablet/iPhone 14 viewportlarında açılıyor.
-- Login ekranında kırmızı runtime `pageerror` gözlenmedi.
-- Auth endpoint gerçek test hesabıyla HTTP 200 döndü.
-- Auth olmadan `drive_bootstrap` doğru şekilde HTTP 401 ve sade JSON hata döndü: `UNAUTHORIZED / Oturum gerekli.`
-- Auth ile `drive_bootstrap` HTTP 200 döndü; response anahtarları: `storage`, `ai`, `courses`, `sections`, `files`, `generatedOutputs`.
-- `create_course` HTTP 200 döndü ve test course kaydı oluşturdu.
-- `create_section` HTTP 200 döndü ve course altında section oluşturdu.
-- `create_upload_session` HTTP 200 döndü; `uploadUrl`, `objectName`, `bucket`, `expiresAt`, `headers`, `metadata` mevcut.
-- Response içinde service role, private key, access token, refresh token veya stack trace kelimeleri görülmedi.
+- Login yapılabildi.
+- Drive açıldı ve loading sonrası içerik geldi.
+- Ders oluşturma çalıştı; boş isim validasyonu çalıştı.
+- Bölüm oluşturma çalıştı.
+- Bölüm/klasör ekranı açıldı, empty state anlaşılır.
+- Dosya seçici açıldı.
+- Dosya detay ekranı mevcut dosya için açıldı.
+- Hatalı/işlenememiş dosyada üretim engeli mesajı gösterildi.
+- Koleksiyonlar boş state'i gerçek/güvenli görünüyor.
+- Console'da kırmızı runtime/page error yakalanmadı.
 
 ## 4. Kırılanlar
-- Release blocker: `complete_upload`, signed URL ile gerçek upload yapılmadan HTTP 200 döndü ve `drive_files` kaydı oluşturdu. Response `status: processing_failed`, `ai_status: failed`, `metadata.extractionError: Dosya indirilemedi.` içeriyor. Bu, sahte/bozuk upload'ın tamamlanmış dosya gibi DB'ye yazılabildiğini gösteriyor.
-- Release blocker: `create_generation_job` canlı ortamda HTTP 500 döndü: `VERTEX_AUTH_FAILED / Vertex AI kimlik doğrulama başarısız.`
-- Release blocker: `central_ai_chat` canlı ortamda HTTP 500 döndü: `VERTEX_AUTH_FAILED / Vertex AI kimlik doğrulama başarısız.`
-- Major issue: Canlı app shell domaininde `https://sourcebase.medasi.com.tr/functions/v1/sourcebase` HTTP 405 döndü; gerçek fonksiyon endpointi canlı bundle configinden `https://medasi.com.tr/functions/v1/sourcebase` olarak çalıştı. Bu routing/konfigürasyon ayrımı frontend/network debug için riskli.
-- Major issue: `OPTIONS https://sourcebase.medasi.com.tr/functions/v1/sourcebase` HTTP 405 döndü; `https://medasi.com.tr/functions/v1/sourcebase` response headerında `access-control-allow-origin: *` görüldü. Production CORS beklenen sıkılıkta değil.
-- Major issue: QA cleanup için `delete_course` çağrısı HTTP 500 döndü: `GCS_DELETE_FAILED / Dosya depolama alanından silinemedi.` Test course/file canlı test hesabında kalmış olabilir.
+- Upload canlı testinde takıldı: PDF seçildikten sonra progress başlamadı, dosya listeye eklenmedi.
+- PDF seçiminden sonra gözlenen network isteklerinde create_upload_session, storage upload veya complete_upload sonucu görünmedi.
+- Bölüm ekranı aynı empty state'te kaldı; kullanıcı upload'ın başladığını, bittiğini veya hata verdiğini göremiyor.
+- Mevcut PDF listede "İşleniyor" görünürken dosya detayında "Durum: Hata" görünüyor; status tutarsız.
+- Aramada "tur3_live_qa" ve "Kardiyoloji" denemelerinde sonuç çıkmadı; mevcut dosya/ders bulunamadı.
+- Tablet viewport login akışı otomasyon koordinatı nedeniyle tamamlanamadı; manuel tablet testi gerekli.
 
 ## 5. Release blocker
 - Var
-- Detay: Upload tamamlanmadan `complete_upload` dosya kaydı açabiliyor. AI üretim ve Central AI canlı Vertex auth hatasıyla 500 dönüyor. Bu iki alan SourceBase'in ana ürün vaadi olan kaynak yükleme ve kaynaklardan AI çıktı üretme akışını canlıda bloke ediyor.
+- Detay: Kullanıcı PDF seçebiliyor ancak canlı upload progress/session/complete zinciri gözlenmedi ve seçilen dosya listeye yansımadı. Drive'ın ana vaadi olan kaynak yükleme canlıda tamamlanamıyor.
 
 ## 6. Major issue
-- CORS canlı fonksiyon endpointinde `*` dönüyor; production security hedefiyle uyumsuz.
-- App domainindeki `/functions/v1/sourcebase` 405 döndüğü için canlı URL altında beklenen proxy/routing net değil.
-- `delete_course` GCS delete hatası nedeniyle QA datası temizlenemedi; kullanıcı açısından dosya/course silme akışı da riskli.
+- Dosya status'u liste ve detay arasında tutarsız: liste "İşleniyor", detay "Hata".
+- Arama mevcut Drive içeriğini bulmuyor gibi davrandı.
+- iPhone 14 ana sayfada bottom nav alt içerik üzerine yaklaşıyor/kaplıyor; alt kartlar kısmen görünür durumda.
 
 ## 7. Polish issue
-- Login ekranındaki erişilebilirlik/DOM uyarısı: `Password field is not contained in a form`. Kritik runtime hata değil.
-- Login ekranında bazı button metinleri erişilebilir isimde iki kez görünüyor: `Giriş Yap Giriş Yap`, `Hesap Oluştur Hesap Oluştur`.
+- Login ekranında console verbose uyarısı var: password field form içinde değil.
+- Flutter web accessibility metninde bazı butonlar iki kez okunuyor: "Giriş Yap Giriş Yap", "Dosya Yükle Dosya Yükle".
 
 ## 8. Kullanıcı deneyimi kararı
-- Evet/Hayır/Kısmen: Hayır. Kullanıcı canlıda login ekranına ulaşabiliyor ve Drive bootstrap/course/section/upload session API'leri cevap veriyor; ancak dosya upload tamamlanma güvenliği ve AI üretim/Central AI canlıda release blocker seviyesinde kırık.
+- Kısmen: Kullanıcı giriş yapıp Drive'a girebiliyor, ders ve bölüm oluşturabiliyor. Ancak canlı kaynak yükleme tamamlanamadığı için kullanıcı kendi kaynağını yükleyip üretime hazır hale getiremiyor.
 
 ## 9. Patch gerekiyor mu?
 - Evet
-- Gereken dosyalar: Backend/Edge Function canlı deploy içeriği ve ortam değişkenleri. Özellikle `complete_upload` canlı doğrulaması, Vertex AI credential/env, CORS/origin config ve GCS delete davranışı düzeltilmeli. Kod dosyası olarak mevcut branch'teki `supabase/functions/sourcebase/index.ts`, `supabase/functions/sourcebase/actions/ai-generation.ts`, `supabase/functions/sourcebase/services/vertex-ai.ts` ve deploy/Coolify env incelenmeli.
+- Gereken dosyalar: Drive upload akışının frontend dosyaları ve gerekirse backend sourcebase function. Frontend tarafında dosya seçimi sonrası upload session/progress/error state tetiklenmiyor gibi görünüyor. Backend tarafında create_upload_session/complete_upload çağrısı canlıda hiç görünmediği için backend ajanının da endpoint/log kontrolü yapması gerekiyor.
 
 ## 10. Kanıt / not
-- Console hatası: Login ekranına kadar kırmızı `pageerror` yok. Console sadece Flutter boot debug ve Chrome DOM uyarısı verdi.
-- Network hatası: Login ekranına kadar failed request yok. API testlerinde `sourcebase.medasi.com.tr/functions/v1/sourcebase` 405; `create_generation_job` ve `central_ai_chat` 500; `delete_course` 500.
-- Ekran gözlemi: Desktop/tablet/iPhone 14 login ekranı açıldı; metinler ve inputlar görünür. Gerçek hesapla post-login browser UX bu makinede tamamlanamadı.
-- Manuel test yapılamadıysa nedeni: Makinede `/System/Volumes/Data` tamamen dolu, Playwright Chromium kurulumu `ENOSPC` ile başarısız oldu. Kurulu Chrome ile login sonrası otomasyon da Crashpad/ProcessSingleton yazımı sırasında `ENOSPC` nedeniyle durdu. Bu nedenle post-login browser Network testi yerine canlı Auth ve Edge Function API testleri curl ile yapıldı.
+- Console hatası: Runtime/page error yok. Sadece debug "Injecting script tag" ve verbose "[DOM] Password field is not contained in a form" uyarısı görüldü.
+- Network hatası: Auth token 200, sourcebase function 200. PDF seçiminden sonra upload session/storage/complete network akışı gözlenmedi.
+- Ekran gözlemi: Login başarılı; Drive ana sayfa açıldı; "Kardiyoloji Test" ve "Akut Koroner Sendrom" oluşturuldu; bölümde PDF seçimi sonrası liste "Bu bölümde henüz dosya yok" olarak kaldı.
+- Manuel test yapılamadıysa nedeni: Canlı test otomasyonla yapıldı. İlk aşamada yerel sistem diski doluluğu Playwright'ı engelledi, cache/temp temizliği sonrası Chrome ile canlı test yapıldı. Tablet akışı koordinat tabanlı otomasyon nedeniyle doğrulanamadı; manuel tablet testi gerekli.

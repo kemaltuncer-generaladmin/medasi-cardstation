@@ -191,7 +191,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: SBPrimaryButton(
                           label: _signingOut ? 'Çıkış...' : 'Çıkış Yap',
                           icon: Icons.logout_rounded,
-                          onPressed: _signingOut ? null : () => _signOut(context),
+                          onPressed: _signingOut
+                              ? null
+                              : () => _signOut(context),
                           loading: _signingOut,
                           size: SBButtonSize.small,
                         ),
@@ -540,13 +542,31 @@ double _safeDouble(Object? raw) {
 
 String _friendlyPurchaseError(String message) {
   final normalized = message.toLowerCase();
+  if (normalized.contains('unknown_action') ||
+      normalized.contains('sourcebase işlemi bulunamadı') ||
+      normalized.contains('purchase_medasicoin')) {
+    return 'Ödeme linki şu anda hazırlanamadı. Kartından ücret alınmadı; lütfen daha sonra tekrar dene.';
+  }
+  if (normalized.contains('400') ||
+      normalized.contains('bad request') ||
+      normalized.contains('invalid')) {
+    return 'Ödeme linki oluşturulamadı. Kartından ücret alınmadı; lütfen daha sonra tekrar dene.';
+  }
   if (normalized.contains('cancel')) {
     return 'Satın alma iptal edildi.';
   }
-  if (normalized.contains('auth') || normalized.contains('session')) {
+  if (normalized.contains('auth') ||
+      normalized.contains('session') ||
+      normalized.contains('oturum') ||
+      normalized.contains('unauthorized')) {
     return 'Satın alma için yeniden giriş yapman gerekiyor.';
   }
-  return 'Ödeme başlatılamadı. Lütfen tekrar deneyin.';
+  if (normalized.contains('network') ||
+      normalized.contains('socket') ||
+      normalized.contains('xmlhttprequest')) {
+    return 'Ödeme servisine ulaşılamadı. Bağlantını kontrol edip tekrar dene.';
+  }
+  return 'Ödeme başlatılamadı. Kartından ücret alınmadı; lütfen tekrar dene.';
 }
 
 class _ProfileHeader extends StatelessWidget {
@@ -996,15 +1016,36 @@ class _MedasiWalletBalance {
     if (client == null || userId == null) {
       return const _MedasiWalletBalance(0);
     }
-    final row = await client
-        .from('profiles')
-        .select()
-        .eq('id', userId)
-        .maybeSingle();
-    if (row == null) {
-      return const _MedasiWalletBalance(0);
+    var profileBalance = const _MedasiWalletBalance(0);
+    try {
+      final row = await client
+          .from('profiles')
+          .select()
+          .eq('id', userId)
+          .maybeSingle();
+      if (row != null) {
+        profileBalance = _MedasiWalletBalance.fromProfileRow(
+          Map<String, dynamic>.from(row),
+        );
+      }
+    } catch (_) {
+      profileBalance = const _MedasiWalletBalance(0);
     }
-    return _MedasiWalletBalance.fromProfileRow(Map<String, dynamic>.from(row));
+
+    try {
+      final rows = await client
+          .from('wallet_transactions')
+          .select('amount_units')
+          .eq('user_id', userId);
+      final units = rows.fold<int>(
+        0,
+        (total, row) =>
+            total + _safeInt(Map<String, dynamic>.from(row)['amount_units']),
+      );
+      return _MedasiWalletBalance(units / 100, rights: profileBalance.rights);
+    } catch (_) {
+      return profileBalance;
+    }
   }
 
   static _MedasiWalletBalance fromProfileRow(Map<String, dynamic> row) {
@@ -1192,7 +1233,7 @@ class _StorePackageTile extends StatefulWidget {
   State<_StorePackageTile> createState() => _StorePackageTileState();
 }
 
-final bool _storePaymentsEnabled = false;
+final bool _storePaymentsEnabled = true;
 
 class _StorePackageTileState extends State<_StorePackageTile> {
   bool _buying = false;
@@ -1266,24 +1307,21 @@ class _StorePackageTileState extends State<_StorePackageTile> {
               'Ödeme bağlantısı hazırlandı. Linki kopyalayıp güvenli ödeme sayfasında işlemi tamamlayabilirsin.',
         );
         setState(() => _checkoutUrl = checkoutUrl);
-        widget.onPurchaseStateChanged();
       } else if (json['ok'] == true) {
         if (!mounted) return;
         setState(
-          () => _buyInfo =
-              'Ödeme işlemi başlatıldı. Bakiye yalnızca backend onayı sonrası güncellenir.',
+          () => _buyError =
+              'Ödeme linki henüz hazır değil. Kartından ücret alınmadı; lütfen daha sonra tekrar dene.',
         );
-        widget.onPurchaseStateChanged();
       } else {
         final error = json['error'];
         final message = error is Map ? _safeText(error['message']) : '';
-        setState(() => _buyError = _friendlyPurchaseError(message));
+        final code = error is Map ? _safeText(error['code']) : '';
+        setState(() => _buyError = _friendlyPurchaseError('$code $message'));
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(
-          () => _buyError = 'Ödeme başlatılamadı. Lütfen tekrar deneyin.',
-        );
+        setState(() => _buyError = _friendlyPurchaseError(error.toString()));
       }
     } finally {
       if (mounted) setState(() => _buying = false);
@@ -1631,6 +1669,8 @@ class _CheckoutLinkActions extends StatelessWidget {
   }
 }
 
+enum _StorePackageKind { coin, subscription }
+
 class _MedasiCoinPackage {
   const _MedasiCoinPackage({
     required this.code,
@@ -1639,6 +1679,8 @@ class _MedasiCoinPackage {
     required this.title,
     required this.description,
     required this.currency,
+    this.kind = _StorePackageKind.coin,
+    this.sortOrder = 0,
   });
 
   final String code;
@@ -1647,9 +1689,11 @@ class _MedasiCoinPackage {
   final String title;
   final String description;
   final String currency;
+  final _StorePackageKind kind;
+  final int sortOrder;
 
   bool get hasPrice => priceCents != null && priceCents! > 0;
-  bool get canPurchase => code.isNotEmpty && coin > 0 && hasPrice;
+  bool get canPurchase => code.isNotEmpty && hasPrice;
   String get priceLabel {
     if (!hasPrice) return 'Fiyat yok';
     final major = priceCents! / 100;
@@ -1665,41 +1709,153 @@ class _MedasiCoinPackage {
       throw StateError('SourceBase bağlantısı hazır değil.');
     }
 
-    final rows = await client
-        .from('store_products')
-        .select()
-        .eq('is_active', true)
-        .order('sort_order');
-    return rows
-        .map((row) {
-          final data = Map<String, dynamic>.from(row);
-          final coin = _safeInt(
-            data['coin_amount'] ?? data['coins'] ?? data['medasicoin_amount'],
-          );
-          final title = _firstText([
-            data['title'],
-            data['name'],
-          ], fallback: coin > 0 ? '$coin MC Paketi' : 'MedAsiCoin Paketi');
-          return _MedasiCoinPackage(
-            code: _safeText(data['code'] ?? data['product_code']),
-            coin: coin,
-            priceCents: _nullablePositiveInt(
-              data['price_cents'] ?? data['amount_cents'],
-            ),
-            title: title,
-            description: _firstText(
-              [data['description'], data['subtitle']],
-              fallback: coin > 0
-                  ? '$coin MedAsiCoin hesabına onaylı ödeme sonrası eklenir.'
-                  : 'Paket hakkı onaylı ödeme sonrası hesaba eklenir.',
-            ),
-            currency: _safeText(data['currency'], fallback: 'TL').toUpperCase(),
-          );
-        })
-        .where((item) => item.code.isNotEmpty && item.coin > 0)
+    final rows = await _loadBackendRows(client);
+    final backendPackages = rows
+        .map(_fromBackendRow)
+        .where((item) => item.code.isNotEmpty && item.hasPrice)
         .toList();
+    return _mergeWithVerifiedCatalog(backendPackages);
+  }
+
+  static Future<List<Map<String, dynamic>>> _loadBackendRows(
+    dynamic client,
+  ) async {
+    try {
+      final rows = await client
+          .from('store_products')
+          .select()
+          .eq('is_active', true);
+      return rows.map<Map<String, dynamic>>(Map<String, dynamic>.from).toList();
+    } catch (_) {
+      try {
+        final rows = await client
+            .from('products')
+            .select()
+            .eq('status', 'published');
+        return rows
+            .map<Map<String, dynamic>>(Map<String, dynamic>.from)
+            .toList();
+      } catch (_) {
+        return const <Map<String, dynamic>>[];
+      }
+    }
+  }
+
+  static _MedasiCoinPackage _fromBackendRow(Map<String, dynamic> data) {
+    final metadata = data['metadata'] is Map
+        ? Map<String, dynamic>.from(data['metadata'] as Map)
+        : const <String, dynamic>{};
+    final coin = _safeInt(
+      data['coin_amount'] ??
+          data['coins'] ??
+          data['medasicoin_amount'] ??
+          metadata['coin_amount'] ??
+          metadata['coins'] ??
+          metadata['medasicoin_amount'],
+    );
+    final code = _safeText(
+      data['code'] ?? data['product_code'] ?? data['slug'] ?? metadata['code'],
+    );
+    final kindText = _safeText(
+      data['kind'] ?? data['type'] ?? metadata['kind'],
+    );
+    final kind = kindText.toLowerCase().contains('subscription') || coin == 0
+        ? _StorePackageKind.subscription
+        : _StorePackageKind.coin;
+    final title = _firstText([
+      data['title'],
+      data['name'],
+      metadata['title'],
+    ], fallback: coin > 0 ? '$coin MC Paketi' : 'SourceBase Üyelik');
+    return _MedasiCoinPackage(
+      code: code,
+      coin: coin,
+      priceCents: _nullablePositiveInt(
+        data['price_cents'] ?? data['amount_cents'] ?? metadata['price_cents'],
+      ),
+      title: title,
+      description: _firstText(
+        [data['description'], data['subtitle'], metadata['description']],
+        fallback: coin > 0
+            ? '$coin MedAsiCoin hesabına onaylı ödeme sonrası eklenir.'
+            : 'Üyelik hakkı onaylı ödeme sonrası hesaba eklenir.',
+      ),
+      currency: _safeText(
+        data['currency'] ?? metadata['currency'],
+        fallback: 'TRY',
+      ).toUpperCase(),
+      kind: kind,
+      sortOrder: _safeInt(data['sort_order'] ?? metadata['sort_order']),
+    );
+  }
+
+  static List<_MedasiCoinPackage> _mergeWithVerifiedCatalog(
+    List<_MedasiCoinPackage> backendPackages,
+  ) {
+    final merged = <_MedasiCoinPackage>[
+      ..._verifiedCatalog,
+      for (final item in backendPackages)
+        if (!_verifiedCatalog.any((verified) => verified.code == item.code))
+          item,
+    ];
+    merged.sort((a, b) {
+      final order = a.sortOrder.compareTo(b.sortOrder);
+      if (order != 0) return order;
+      return a.priceCents?.compareTo(b.priceCents ?? 0) ?? 0;
+    });
+    return merged;
   }
 }
+
+const List<_MedasiCoinPackage> _verifiedCatalog = [
+  _MedasiCoinPackage(
+    code: 'mc_10',
+    coin: 10,
+    priceCents: 4000,
+    title: '10 MC Paketi',
+    description: '10 MedAsiCoin onaylı ödeme sonrası cüzdanına eklenir.',
+    currency: 'TL',
+    sortOrder: 10,
+  ),
+  _MedasiCoinPackage(
+    code: 'mc_20',
+    coin: 20,
+    priceCents: 6500,
+    title: '20 MC Paketi',
+    description: '20 MedAsiCoin onaylı ödeme sonrası cüzdanına eklenir.',
+    currency: 'TL',
+    sortOrder: 20,
+  ),
+  _MedasiCoinPackage(
+    code: 'mc_50',
+    coin: 50,
+    priceCents: 18000,
+    title: '50 MC Paketi',
+    description: '50 MedAsiCoin onaylı ödeme sonrası cüzdanına eklenir.',
+    currency: 'TL',
+    sortOrder: 30,
+  ),
+  _MedasiCoinPackage(
+    code: 'weekly',
+    coin: 0,
+    priceCents: 10000,
+    title: 'Weekly',
+    description: 'Haftalık SourceBase erişimi onaylı ödeme sonrası başlar.',
+    currency: 'TRY',
+    kind: _StorePackageKind.subscription,
+    sortOrder: 40,
+  ),
+  _MedasiCoinPackage(
+    code: 'monthly',
+    coin: 0,
+    priceCents: 50000,
+    title: 'Monthly',
+    description: 'Aylık SourceBase erişimi onaylı ödeme sonrası başlar.',
+    currency: 'TRY',
+    kind: _StorePackageKind.subscription,
+    sortOrder: 50,
+  ),
+];
 
 class _StatePanel extends StatelessWidget {
   const _StatePanel({

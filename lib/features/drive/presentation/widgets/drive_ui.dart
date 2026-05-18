@@ -47,7 +47,7 @@ class WorkspaceScroll extends StatelessWidget {
     final horizontalPadding = ResponsiveLayout.getHorizontalPadding(context);
     final bottomPadding = isDesktop || isTablet
         ? 48.0
-        : SourceBaseBottomNav.contentBottomPadding(context);
+        : SourceBaseBottomNav.scrollEndPadding(context);
     final topPadding = isDesktop || isTablet
         ? 18.0
         : MediaQuery.viewPaddingOf(context).top + 8.0;
@@ -91,6 +91,19 @@ class WorkspaceScroll extends StatelessWidget {
 double mobileBottomSafePadding(BuildContext context, {double extra = 0}) {
   final base = SourceBaseBottomNav.contentBottomPadding(context);
   return base + extra;
+}
+
+class WorkspaceBottomNavGuard extends StatelessWidget {
+  const WorkspaceBottomNavGuard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (ResponsiveLayout.isTablet(context) ||
+        ResponsiveLayout.isDesktop(context)) {
+      return const SizedBox.shrink();
+    }
+    return SizedBox(height: SourceBaseBottomNav.contentTailGuard);
+  }
 }
 
 class DriveTopBar extends StatelessWidget {

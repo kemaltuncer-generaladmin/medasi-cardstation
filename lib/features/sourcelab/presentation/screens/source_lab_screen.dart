@@ -3042,7 +3042,10 @@ class _LabScroll extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     final horizontalPadding = width < 420 ? 16.0 : 26.0;
     final isMobile = width < 600;
-    final bottomPadding = isMobile ? mobileBottomSafePadding(context, extra: 18) : 72.0;
+    final topPadding = MediaQuery.viewPaddingOf(context).top + 12;
+    final bottomPadding = isMobile
+        ? SourceBaseBottomNav.scrollEndPadding(context)
+        : 48.0;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 940),
@@ -3050,7 +3053,7 @@ class _LabScroll extends StatelessWidget {
           physics: const BouncingScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
             horizontalPadding,
-            16,
+            topPadding,
             horizontalPadding,
             bottomPadding,
           ),
@@ -3059,6 +3062,7 @@ class _LabScroll extends StatelessWidget {
               child,
               const SizedBox(height: 16),
             ],
+            if (isMobile) const WorkspaceBottomNavGuard(),
           ],
         ),
       ),

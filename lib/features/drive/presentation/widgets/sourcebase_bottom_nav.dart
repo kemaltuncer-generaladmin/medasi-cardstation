@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -14,14 +16,27 @@ class SourceBaseBottomNav extends StatelessWidget {
 
   static const double navHeight = 76;
   static const double navTopGap = 8;
-  static const double contentBuffer = 132;
+  static const double contentBuffer = 172;
+  static const double contentTailGuard = 28;
+  static const double minBottomSafeArea = 14;
+
+  static double safeAreaBottom(BuildContext context) {
+    return math.max(
+      MediaQuery.viewPaddingOf(context).bottom,
+      minBottomSafeArea,
+    );
+  }
 
   static double bottomOffset(BuildContext context) {
-    return MediaQuery.viewPaddingOf(context).bottom + navTopGap;
+    return safeAreaBottom(context) + navTopGap;
   }
 
   static double contentBottomPadding(BuildContext context) {
     return bottomOffset(context) + navHeight + contentBuffer;
+  }
+
+  static double scrollEndPadding(BuildContext context) {
+    return contentBottomPadding(context) + contentTailGuard;
   }
 
   @override

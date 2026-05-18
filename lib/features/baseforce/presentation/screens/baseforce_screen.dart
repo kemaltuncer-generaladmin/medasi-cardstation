@@ -786,7 +786,7 @@ class _BaseForcePage extends StatelessWidget {
     final horizontalPadding = MediaQuery.sizeOf(context).width < 390 ? 16.0 : 32.0;
     final topPadding = MediaQuery.viewPaddingOf(context).top + 12;
     final bottomPadding = isMobile
-        ? mobileBottomSafePadding(context, extra: 20)
+        ? SourceBaseBottomNav.scrollEndPadding(context)
         : 48.0;
     return Center(
       child: ConstrainedBox(
@@ -810,6 +810,7 @@ class _BaseForcePage extends StatelessWidget {
               actions: actions,
             ),
             ...children,
+            if (isMobile) const WorkspaceBottomNavGuard(),
           ],
         ),
       ),

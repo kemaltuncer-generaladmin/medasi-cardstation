@@ -341,6 +341,7 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
             ),
           ),
         ],
+        const WorkspaceBottomNavGuard(),
       ],
     );
   }

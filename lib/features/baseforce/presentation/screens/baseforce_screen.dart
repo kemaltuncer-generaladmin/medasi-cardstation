@@ -288,15 +288,46 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
     if (kind == GeneratedKind.flashcard) {
       return flashcardCount.clamp(1, 100);
     }
+    if (kind == GeneratedKind.question) {
+      return questionCount.clamp(1, 100);
+    }
     return _baseForceCount(kind);
   }
 
   String? _qualityTierFor(GeneratedKind kind) {
-    if (kind != GeneratedKind.flashcard) return null;
-    return switch (flashcardDifficulty) {
+    final difficulty = switch (kind) {
+      GeneratedKind.flashcard => flashcardDifficulty,
+      GeneratedKind.question => selectedQuestionDifficulty,
+      _ => '',
+    };
+    return switch (difficulty) {
       'Kolay' => 'economy',
-      'Zor' => 'premium',
+      'Zor' || 'Çok Zor' => 'premium',
+      '' => null,
       _ => 'standard',
+    };
+  }
+
+  Map<String, dynamic>? _generationOptionsFor(GeneratedKind kind) {
+    if (kind != GeneratedKind.question) return null;
+    final clinical = questionType == 'Klinik Vaka';
+    final hard =
+        selectedQuestionDifficulty == 'Zor' ||
+        selectedQuestionDifficulty == 'Çok Zor';
+    final mode = switch (questionType) {
+      'Klinik Vaka' => 'clinical_case',
+      'Doğru-Yanlış' => 'true_false',
+      _ => 'multiple_choice',
+    };
+    return {
+      'question_type': mode,
+      'mode': mode,
+      'style': clinical ? 'clinical' : 'exam',
+      'difficulty': hard ? 'hard' : selectedQuestionDifficulty.toLowerCase(),
+      'clinical': clinical,
+      'hard': hard,
+      'explanations': questionAddExplanation,
+      'structured': true,
     };
   }
 
@@ -334,6 +365,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         jobType: jobType,
         count: _generationCount(kind),
         qualityTier: _qualityTierFor(kind),
+        options: _generationOptionsFor(kind),
       );
       final data = createResponse['data'];
       final jobId = data is Map ? data['jobId']?.toString().trim() ?? '' : '';
@@ -696,7 +728,7 @@ class _GenerationResult {
 String _baseForceJobType(GeneratedKind kind) {
   return switch (kind) {
     GeneratedKind.flashcard => 'flashcard',
-    GeneratedKind.question => 'quiz',
+    GeneratedKind.question => 'question',
     GeneratedKind.summary => 'summary',
     GeneratedKind.algorithm => 'algorithm',
     GeneratedKind.comparison || GeneratedKind.table => 'comparison',
@@ -2034,6 +2066,17 @@ class _QuestionFactoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DriveFile? readyFile;
+    for (final file in data.recentFiles) {
+      if (selectedSources.contains(file.id) && _isBaseForceReadySource(file)) {
+        readyFile = file;
+        break;
+      }
+    }
+    final canGenerate = readyFile != null;
+    final sourceStatus = readyFile == null
+        ? 'Hazır kaynak seçilmedi'
+        : '${readyFile.title} • ${readyFile.sizeLabel} • ${_baseForceReadyLabel(readyFile)}';
     return _BaseForcePage(
       title: 'Soru Fabrikas\u0131',
       subtitle:
@@ -2128,40 +2171,46 @@ class _QuestionFactoryScreen extends StatelessWidget {
         const SizedBox(height: 14),
         const _TwoPane(left: _QuestionPreview(), right: _ExplanationPreview()),
         const SizedBox(height: 18),
-        const _ProductionSummary(
+        _ProductionSummary(
           items: [
             _SummaryItemData(
               Icons.description_outlined,
-              '20',
+              '$questionCount',
               'Soru',
               AppColors.blue,
             ),
             _SummaryItemData(
               Icons.chat_bubble_outline_rounded,
-              'Açıklamalı',
+              addExplanation ? 'Açıklamalı' : 'Yanıt odaklı',
               'Üretim',
               AppColors.cyan,
             ),
             _SummaryItemData(
               Icons.bar_chart_rounded,
-              'Orta',
+              selectedDifficulty,
               'Zorluk Seviyesi',
               AppColors.orange,
             ),
             _SummaryItemData(
-              Icons.track_changes_rounded,
-              'Tanı, Tedavi,\nFizyoloji',
-              'Odak Alanları',
+              Icons.payments_outlined,
+              'Backend',
+              'MC hesaplar',
+              AppColors.orange,
+            ),
+            _SummaryItemData(
+              Icons.source_outlined,
+              sourceStatus,
+              'Seçili Kaynak',
               AppColors.purple,
             ),
           ],
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: 'Soruları Üret',
+          label: canGenerate ? 'Soruları Üret' : 'Hazır Kaynak Seç',
           icon: Icons.auto_fix_high_rounded,
           height: 58,
-          onTap: onGenerate,
+          onTap: canGenerate ? onGenerate : null,
         ),
       ],
     );

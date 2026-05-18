@@ -909,17 +909,6 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
     return file.copyWith(status: status, pageLabel: pageLabel);
   }
 
-  void _removeUploadTask(String fileId) {
-    if (!mounted) return;
-    setState(() {
-      data = data.copyWith(
-        uploads: data.uploads
-            .where((task) => task.file.id != fileId)
-            .toList(),
-      );
-    });
-  }
-
   DriveFileKind _kindForFileName(String fileName) {
     final lower = fileName.toLowerCase();
     if (lower.endsWith('.pdf')) return DriveFileKind.pdf;

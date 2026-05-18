@@ -16,7 +16,7 @@ class DriveUploadService {
       ..accept = '.pdf,.ppt,.pptx,.doc,.docx,.zip,application/pdf'
       ..multiple = false
       ..style.display = 'none';
-    html.document.body?.appendChild(input);
+    html.document.body?.children.add(input);
     final picked = Completer<PickedDriveFile?>();
 
     void cleanup() {

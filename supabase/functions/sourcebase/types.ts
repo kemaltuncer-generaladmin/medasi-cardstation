@@ -39,6 +39,7 @@ export type GenerationType =
   | "flashcard"
   | "quiz"
   | "summary"
+  | "exam_morning_summary"
   | "algorithm"
   | "comparison"
   | "podcast"
@@ -92,6 +93,23 @@ export interface Summary {
   title: string;
   bulletPoints: string[];
   fullText: string;
+}
+
+export interface ExamMorningSummary {
+  title: string;
+  must_know: string[];
+  commonly_confused: string[];
+  clinical_tus_tips: string[];
+  red_flags?: string[];
+  mini_table?: {
+    headers?: string[];
+    rows: Array<Record<string, string> | string[] | string>;
+  };
+  algorithm_flow?: string[];
+  self_check: Array<{
+    question: string;
+    answer: string;
+  }>;
 }
 
 // Algorithm Interface

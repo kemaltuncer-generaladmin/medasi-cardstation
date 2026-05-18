@@ -83,6 +83,16 @@ export function resolveTextRoute(
         reason = "summary:structured";
       }
       break;
+    case "exam_morning_summary":
+      if (options.premium || options.clinical) {
+        selected = reasoning;
+        tier = "reasoning";
+        reason = "exam_morning_summary:premium_or_clinical";
+      } else if (options.short) {
+        selected = standard;
+        reason = "exam_morning_summary:short_structured";
+      }
+      break;
     case "algorithm":
       if (options.clinical) {
         selected = reasoning;

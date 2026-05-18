@@ -14,6 +14,8 @@ import '../../../drive/presentation/widgets/sourcebase_bottom_nav.dart';
 
 enum SourceLabView {
   home,
+  examMorningBuilder,
+  examMorningResult,
   clinicalBuilder,
   clinicalResult,
   planBuilder,
@@ -26,7 +28,7 @@ enum SourceLabView {
   mindMapResult,
 }
 
-enum _ToolKind { clinical, plan, podcast, infographic, mindMap }
+enum _ToolKind { examMorning, clinical, plan, podcast, infographic, mindMap }
 
 enum _HeroArtKind { lab, clinical, plan, podcast, infographic, mindMap }
 
@@ -85,6 +87,11 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
   String infographicDensity = 'Dengeli';
   String infographicQuality = 'Standart';
 
+  String examSummaryMode = 'Sınav sabahı kritikler';
+  String examLengthTarget = '7 dakikalık';
+  String examQuality = 'Standart';
+  final Set<String> examOutputFormats = {'Madde madde', 'Mini tablo'};
+
   String mapKind = 'Konu Bazlı';
   String mapDepth = 'Orta';
   String mapLook = 'Renkli';
@@ -105,6 +112,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
   void _back() {
     setState(() {
       view = switch (view) {
+        SourceLabView.examMorningResult => SourceLabView.examMorningBuilder,
         SourceLabView.clinicalResult => SourceLabView.clinicalBuilder,
         SourceLabView.planResult => SourceLabView.planBuilder,
         SourceLabView.podcastResult => SourceLabView.podcastBuilder,
@@ -163,18 +171,28 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
         fileId: file.id,
         jobType: jobType,
         sourceIds: selectedSources.map((source) => source.id).toList(),
-        qualityTier: tool == _ToolKind.infographic
-            ? _infographicQualityValue(infographicQuality)
-            : null,
-        options: tool == _ToolKind.infographic
-            ? _infographicPayloadOptions(
-                type: infographicType,
-                style: infographicStyle,
-                density: infographicDensity,
-                quality: infographicQuality,
-                source: selectedSources.first,
-              )
-            : null,
+        qualityTier: switch (tool) {
+          _ToolKind.examMorning => _examQualityValue(examQuality),
+          _ToolKind.infographic => _infographicQualityValue(infographicQuality),
+          _ => null,
+        },
+        options: switch (tool) {
+          _ToolKind.examMorning => _examMorningPayloadOptions(
+            mode: examSummaryMode,
+            length: examLengthTarget,
+            formats: examOutputFormats,
+            quality: examQuality,
+            source: selectedSources.first,
+          ),
+          _ToolKind.infographic => _infographicPayloadOptions(
+            type: infographicType,
+            style: infographicStyle,
+            density: infographicDensity,
+            quality: infographicQuality,
+            source: selectedSources.first,
+          ),
+          _ => null,
+        },
       );
       final data = createResponse['data'];
       final jobId = data is Map ? data['jobId']?.toString().trim() ?? '' : '';
@@ -193,6 +211,16 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
           jobId: jobId,
           createdAtLabel: _sourceLabDateTimeLabel(DateTime.now()),
           mcCostLabel: _mcCostLabel(data),
+          examSummaryMode: tool == _ToolKind.examMorning
+              ? examSummaryMode
+              : null,
+          examLengthTarget: tool == _ToolKind.examMorning
+              ? examLengthTarget
+              : null,
+          examOutputFormat: tool == _ToolKind.examMorning
+              ? _examFormatLabel(examOutputFormats)
+              : null,
+          examQuality: tool == _ToolKind.examMorning ? examQuality : null,
           infographicType: tool == _ToolKind.infographic
               ? infographicType
               : null,
@@ -212,7 +240,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _labError = _friendlyLabError(error);
+        _labError = _friendlyLabError(error, tool: tool);
       });
     }
   }
@@ -279,7 +307,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
       _toast('Sonuç üretimler listesine kaydedildi.');
     } catch (error) {
       if (!mounted) return;
-      _toast(_friendlyLabError(error));
+      _toast(_friendlyLabError(error, tool: result.tool));
     }
   }
 
@@ -315,6 +343,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
   void _openTool(_ToolKind tool) {
     _open(switch (tool) {
       _ToolKind.clinical => SourceLabView.clinicalBuilder,
+      _ToolKind.examMorning => SourceLabView.examMorningBuilder,
       _ToolKind.plan => SourceLabView.planBuilder,
       _ToolKind.podcast => SourceLabView.podcastBuilder,
       _ToolKind.infographic => SourceLabView.infographicBuilder,
@@ -454,8 +483,50 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                 onSearch: widget.onSearch,
                 onPickSources: _showSourcePicker,
                 onOpenTool: _openTool,
-                onContinue: () => _openTool(_ToolKind.clinical),
+                onContinue: () => _openTool(_ToolKind.examMorning),
                 onToast: _toast,
+              ),
+              SourceLabView.examMorningBuilder => _ExamMorningBuilder(
+                selectedSources: selectedSources,
+                summaryMode: examSummaryMode,
+                lengthTarget: examLengthTarget,
+                outputFormats: examOutputFormats,
+                quality: examQuality,
+                onBack: _back,
+                onSearch: widget.onSearch,
+                onPickSources: _showSourcePicker,
+                onRemoveSource: _removeSource,
+                onSummaryMode: (value) =>
+                    setState(() => examSummaryMode = value),
+                onLengthTarget: (value) =>
+                    setState(() => examLengthTarget = value),
+                onToggleFormat: (value) {
+                  setState(() {
+                    if (examOutputFormats.contains(value)) {
+                      if (examOutputFormats.length == 1) return;
+                      examOutputFormats.remove(value);
+                    } else {
+                      examOutputFormats.add(value);
+                    }
+                  });
+                },
+                onQuality: (value) => setState(() => examQuality = value),
+                onGenerate: () => _generate(
+                  SourceLabView.examMorningResult,
+                  _ToolKind.examMorning,
+                ),
+              ),
+              SourceLabView.examMorningResult => _ExamMorningResult(
+                loading: _isLoading,
+                result: _labResult,
+                error: _labError,
+                onBack: _back,
+                onSave: () {
+                  _saveLabResult();
+                },
+                onCopy: _copyLabResult,
+                onRegenerate: () => _open(SourceLabView.examMorningBuilder),
+                onPickSources: _showSourcePicker,
               ),
               SourceLabView.clinicalBuilder => _ClinicalScenarioBuilder(
                 selectedSources: selectedSources,
@@ -693,6 +764,10 @@ class _LabGenerationResult {
     required this.createdAtLabel,
     required this.mcCostLabel,
     required this.content,
+    this.examSummaryMode,
+    this.examLengthTarget,
+    this.examOutputFormat,
+    this.examQuality,
     this.infographicType,
     this.infographicStyle,
     this.infographicDensity,
@@ -707,6 +782,10 @@ class _LabGenerationResult {
   final String createdAtLabel;
   final String mcCostLabel;
   final Object? content;
+  final String? examSummaryMode;
+  final String? examLengthTarget;
+  final String? examOutputFormat;
+  final String? examQuality;
   final String? infographicType;
   final String? infographicStyle;
   final String? infographicDensity;
@@ -791,6 +870,80 @@ Map<String, dynamic> _infographicPayloadOptions({
   };
 }
 
+Map<String, dynamic> _examMorningPayloadOptions({
+  required String mode,
+  required String length,
+  required Set<String> formats,
+  required String quality,
+  required _LabSource source,
+}) {
+  final qualityValue = _examQualityValue(quality);
+  final formatValues = formats.map(_examFormatValue).toList()..sort();
+  final outputFormat = formatValues.isEmpty
+      ? 'bullet_points'
+      : formatValues.join('+');
+  return {
+    'summary_mode': _examSummaryModeValue(mode),
+    'length_target': _examLengthValue(length),
+    'output_format': outputFormat,
+    'output_formats': formatValues,
+    'quality_tier': qualityValue,
+    'mode': 'exam-morning',
+    'structured': true,
+    'clinical': mode == 'Klinik ipuçları' || mode == 'TUS tarzı yüksek verim',
+    'premium': qualityValue == 'premium',
+    'short': length == '3 dakikalık' || length == '7 dakikalık',
+    'complex': length == 'Detaylı son tekrar',
+    'source_size_tier': _sourceSizeTierFromLabel(source.size),
+  };
+}
+
+String _examSummaryModeValue(String value) {
+  return switch (value) {
+    'Hızlı tekrar' => 'quick_review',
+    'Sınav sabahı kritikler' => 'exam_morning_critical',
+    'En çok karıştırılanlar' => 'commonly_confused',
+    'Klinik ipuçları' => 'clinical_tips',
+    'Temel bilim mekanizması' => 'basic_science_mechanism',
+    'TUS tarzı yüksek verim' => 'tus_high_yield',
+    _ => 'exam_morning_critical',
+  };
+}
+
+String _examLengthValue(String value) {
+  return switch (value) {
+    '3 dakikalık' => '3_min',
+    '7 dakikalık' => '7_min',
+    '15 dakikalık' => '15_min',
+    'Detaylı son tekrar' => 'detailed_final_review',
+    _ => '7_min',
+  };
+}
+
+String _examFormatValue(String value) {
+  return switch (value) {
+    'Madde madde' => 'bullet_points',
+    'Mini tablo' => 'mini_table',
+    'Klinik ipucu kartları' => 'clinical_tip_cards',
+    'Soru-cevap' => 'qa',
+    'Algoritmik akış' => 'algorithm_flow',
+    _ => 'bullet_points',
+  };
+}
+
+String _examQualityValue(String value) {
+  return switch (value) {
+    'Ekonomik' => 'economy',
+    'Premium' => 'premium',
+    _ => 'standard',
+  };
+}
+
+String _examFormatLabel(Set<String> formats) {
+  if (formats.isEmpty) return 'Madde madde';
+  return formats.join(' + ');
+}
+
 String _infographicTypeValue(String value) {
   return switch (value) {
     'Klinik Akış' => 'clinical_flow',
@@ -847,6 +1000,7 @@ String _sourceSizeTierFromLabel(String value) {
 
 String? _sourceLabJobType(_ToolKind tool) {
   return switch (tool) {
+    _ToolKind.examMorning => 'exam_morning_summary',
     _ToolKind.podcast => 'podcast',
     _ToolKind.infographic => 'infographic',
     _ToolKind.clinical || _ToolKind.plan || _ToolKind.mindMap => null,
@@ -855,6 +1009,7 @@ String? _sourceLabJobType(_ToolKind tool) {
 
 GeneratedKind? _sourceLabGeneratedKind(_ToolKind tool) {
   return switch (tool) {
+    _ToolKind.examMorning => GeneratedKind.summary,
     _ToolKind.podcast => GeneratedKind.podcast,
     _ToolKind.infographic => GeneratedKind.infographic,
     _ToolKind.clinical || _ToolKind.plan || _ToolKind.mindMap => null,
@@ -865,6 +1020,11 @@ int _sourceLabContentCount(Object? content) {
   if (content is List) return content.length;
   if (content is Map) {
     for (final key in const [
+      'must_know',
+      'mutlaka_bil',
+      'commonly_confused',
+      'clinical_tus_tips',
+      'self_check',
       'segments',
       'chapters',
       'steps',
@@ -939,6 +1099,7 @@ String _plainTextLabValue(Object? value) {
 
 String _sourceLabToolTitle(_ToolKind tool) {
   return switch (tool) {
+    _ToolKind.examMorning => 'Sınav Sabahı Özeti',
     _ToolKind.clinical => 'Klinik Senaryo',
     _ToolKind.plan => 'Öğrenme Planı',
     _ToolKind.podcast => 'Podcast Özeti',
@@ -947,7 +1108,7 @@ String _sourceLabToolTitle(_ToolKind tool) {
   };
 }
 
-String _friendlyLabError(Object error) {
+String _friendlyLabError(Object error, {_ToolKind? tool}) {
   final text = error
       .toString()
       .replaceFirst('Bad state: ', '')
@@ -956,6 +1117,15 @@ String _friendlyLabError(Object error) {
       .trim();
   if (text.contains('SourceBase Supabase client is not configured')) {
     return 'Oturum bağlantısı hazır değil. Lütfen tekrar giriş yapın.';
+  }
+  if (tool == _ToolKind.examMorning &&
+      (text.contains('VERTEX_AUTH_FAILED') ||
+          text.contains('VERTEX_NOT_CONFIGURED') ||
+          text.contains('JOB_CREATE_FAILED') ||
+          text.contains('AI_FAILED') ||
+          text.contains('UPSTREAM') ||
+          text.contains('CONFIG_ERROR'))) {
+    return 'Sınav Sabahı Özeti şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
   }
   if (text.contains('IMAGE_PROVIDER_NOT_CONFIGURED')) {
     return 'İnfografik üretimi şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
@@ -1231,6 +1401,13 @@ class _ToolGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final tools = [
       _ToolSpec(
+        _ToolKind.examMorning,
+        Icons.alarm_on_outlined,
+        'Sınav Sabahı Özeti',
+        'Son tekrar için kısa,\nyüksek verimli sınav\nözeti çıkarın.',
+        AppColors.orange,
+      ),
+      _ToolSpec(
         _ToolKind.clinical,
         Icons.medical_services_outlined,
         'Klinik Senaryo',
@@ -1268,7 +1445,7 @@ class _ToolGrid extends StatelessWidget {
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth > 760 ? 5 : 2;
+        final columns = constraints.maxWidth > 760 ? 3 : 2;
         final gap = 12.0;
         final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
         return Wrap(
@@ -1378,11 +1555,11 @@ class _SmartSuggestionsPanel extends StatelessWidget {
             onAction: () => onToast('Öneriler güncellendi.'),
           ),
           _SuggestionRow(
-            icon: Icons.psychology_outlined,
+            icon: Icons.alarm_on_outlined,
             color: AppColors.cyan,
             text:
-                'Yüklediğin kaynaklardan istediğin konuda özetler çıkarabilirsin.',
-            onTap: () => onOpenTool(_ToolKind.infographic),
+                'Sınav sabahı için kritik bilgileri kısa bir son tekrar formatına dönüştür.',
+            onTap: () => onOpenTool(_ToolKind.examMorning),
           ),
           _SuggestionRow(
             icon: Icons.medical_services_outlined,
@@ -2630,6 +2807,717 @@ class _InfographicOptionCard extends StatelessWidget {
   }
 }
 
+class _ExamMorningBuilder extends StatelessWidget {
+  const _ExamMorningBuilder({
+    required this.selectedSources,
+    required this.summaryMode,
+    required this.lengthTarget,
+    required this.outputFormats,
+    required this.quality,
+    required this.onBack,
+    required this.onSearch,
+    required this.onPickSources,
+    required this.onRemoveSource,
+    required this.onSummaryMode,
+    required this.onLengthTarget,
+    required this.onToggleFormat,
+    required this.onQuality,
+    required this.onGenerate,
+  });
+
+  final List<_LabSource> selectedSources;
+  final String summaryMode;
+  final String lengthTarget;
+  final Set<String> outputFormats;
+  final String quality;
+  final VoidCallback onBack;
+  final VoidCallback onSearch;
+  final VoidCallback onPickSources;
+  final ValueChanged<String> onRemoveSource;
+  final ValueChanged<String> onSummaryMode;
+  final ValueChanged<String> onLengthTarget;
+  final ValueChanged<String> onToggleFormat;
+  final ValueChanged<String> onQuality;
+  final VoidCallback onGenerate;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSources = selectedSources.isNotEmpty;
+    final blockedReasons = selectedSources
+        .where((source) => source.disabledReason != null)
+        .map((source) => source.disabledReason!)
+        .toSet()
+        .toList();
+    final canGenerate = hasSources && blockedReasons.isEmpty;
+    return _LabScroll(
+      children: [
+        _LabTopBar(onBack: onBack, onSearch: onSearch),
+        _ExamMorningHero(
+          selectedCount: selectedSources.length,
+          hasSources: hasSources,
+          onPickSources: onPickSources,
+        ),
+        _StepPanel(
+          number: 1,
+          title: 'Kaynak Seçimi',
+          trailing: _SmallActionButton(
+            label: hasSources ? 'Kaynak Değiştir' : 'Drive’dan kaynak seç',
+            icon: Icons.folder_open_rounded,
+            onTap: onPickSources,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!hasSources)
+                const _LabEmptyState(
+                  icon: Icons.folder_open_outlined,
+                  title: 'Kaynak seçilmedi',
+                  message:
+                      'Hazır ve boyutu 0 KB olmayan bir Drive kaynağı seçerek son tekrar özetini başlatın.',
+                )
+              else
+                _SourceGrid(
+                  sources: selectedSources,
+                  allowRemove: true,
+                  onRemove: onRemoveSource,
+                  onMenu: onPickSources,
+                ),
+              for (final reason in blockedReasons) ...[
+                const SizedBox(height: 12),
+                _LabNotice(text: reason),
+              ],
+            ],
+          ),
+        ),
+        _StepPanel(
+          number: 2,
+          title: 'Özet Tipi',
+          child: _InfographicOptionGrid(
+            values: const [
+              'Hızlı tekrar',
+              'Sınav sabahı kritikler',
+              'En çok karıştırılanlar',
+              'Klinik ipuçları',
+              'Temel bilim mekanizması',
+              'TUS tarzı yüksek verim',
+            ],
+            selected: summaryMode,
+            onSelected: onSummaryMode,
+          ),
+        ),
+        _StepPanel(
+          number: 3,
+          title: 'Uzunluk ve Format',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SegmentedOptions(
+                values: const [
+                  '3 dakikalık',
+                  '7 dakikalık',
+                  '15 dakikalık',
+                  'Detaylı son tekrar',
+                ],
+                selected: lengthTarget,
+                onSelected: onLengthTarget,
+              ),
+              const SizedBox(height: 16),
+              _ExamFormatGrid(
+                selected: outputFormats,
+                onToggle: onToggleFormat,
+              ),
+            ],
+          ),
+        ),
+        _StepPanel(
+          number: 4,
+          title: 'Kalite ve MC',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SegmentedOptions(
+                values: const ['Ekonomik', 'Standart', 'Premium'],
+                selected: quality,
+                onSelected: onQuality,
+              ),
+              const SizedBox(height: 12),
+              _LabNotice(
+                text: quality == 'Premium'
+                    ? 'Premium kalite daha derin ayrıştırma hedefler ve daha yüksek MC tüketebilir. MC tutarı üretim sırasında güvenli şekilde hesaplanır.'
+                    : 'MC tutarı üretim sırasında güvenli şekilde hesaplanır.',
+              ),
+            ],
+          ),
+        ),
+        _PrimaryLabButton(
+          label: 'Sınav Sabahı Özeti üret',
+          icon: Icons.alarm_on_rounded,
+          onTap: canGenerate ? onGenerate : null,
+          subtitle: canGenerate
+              ? null
+              : hasSources
+              ? 'Hazır olmayan kaynak var'
+              : 'Önce kaynak seç',
+          height: 76,
+        ),
+      ],
+    );
+  }
+}
+
+class _ExamMorningHero extends StatelessWidget {
+  const _ExamMorningHero({
+    required this.selectedCount,
+    required this.hasSources,
+    required this.onPickSources,
+  });
+
+  final int selectedCount;
+  final bool hasSources;
+  final VoidCallback onPickSources;
+
+  @override
+  Widget build(BuildContext context) {
+    return _LabPanel(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 620;
+          final copy = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sınav Sabahı Özeti',
+                style: TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 30,
+                  height: 1.05,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Kaynağından son tekrar için yüksek verimli, kısa ve sınav odaklı özet çıkar.',
+                style: TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 16,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _MiniHeroChip(
+                    icon: Icons.library_books_outlined,
+                    label: '$selectedCount kaynak',
+                  ),
+                  const _MiniHeroChip(
+                    icon: Icons.bolt_outlined,
+                    label: '5-10 dk tekrar',
+                  ),
+                  const _MiniHeroChip(
+                    icon: Icons.medical_information_outlined,
+                    label: 'Klinik ipucu',
+                  ),
+                ],
+              ),
+            ],
+          );
+          final action = _SmallActionButton(
+            label: hasSources ? 'Kaynakları yönet' : 'Drive’dan kaynak seç',
+            icon: Icons.folder_open_rounded,
+            onTap: onPickSources,
+          );
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [copy, const SizedBox(height: 16), action],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: copy),
+              const SizedBox(width: 18),
+              SizedBox(width: 230, child: action),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ExamFormatGrid extends StatelessWidget {
+  const _ExamFormatGrid({required this.selected, required this.onToggle});
+
+  final Set<String> selected;
+  final ValueChanged<String> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    const values = [
+      'Madde madde',
+      'Mini tablo',
+      'Klinik ipucu kartları',
+      'Soru-cevap',
+      'Algoritmik akış',
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth > 680 ? 3 : 2;
+        const gap = 10.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final value in values)
+              SizedBox(
+                width: width,
+                child: _ExamFormatCard(
+                  label: value,
+                  selected: selected.contains(value),
+                  onTap: () => onToggle(value),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ExamFormatCard extends StatelessWidget {
+  const _ExamFormatCard({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 62,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFEAF5FF) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? AppColors.blue : AppColors.line),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+              color: selected ? AppColors.blue : AppColors.softText,
+              size: 20,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExamMorningResult extends StatelessWidget {
+  const _ExamMorningResult({
+    required this.loading,
+    required this.result,
+    required this.error,
+    required this.onBack,
+    required this.onSave,
+    required this.onCopy,
+    required this.onRegenerate,
+    required this.onPickSources,
+  });
+
+  final bool loading;
+  final _LabGenerationResult? result;
+  final String? error;
+  final VoidCallback onBack;
+  final VoidCallback onSave;
+  final VoidCallback onCopy;
+  final VoidCallback onRegenerate;
+  final VoidCallback onPickSources;
+
+  @override
+  Widget build(BuildContext context) {
+    final result = this.result;
+    return _LabScroll(
+      children: [
+        _MinimalTopBar(
+          title: 'Sınav Sabahı Özeti',
+          subtitle: loading
+              ? 'Kaynak taranıyor ve yüksek verimli tekrar hazırlanıyor.'
+              : result == null
+              ? 'Son tekrar özeti tamamlanamadı.'
+              : '${result.sourceTitle} kaynağından oluşturuldu.',
+          onBack: onBack,
+        ),
+        _LabPanel(
+          child: loading
+              ? const _ExamLoadingState()
+              : error != null
+              ? _LabEmptyState(
+                  icon: Icons.error_outline_rounded,
+                  title: 'Üretim tamamlanamadı',
+                  message: error!,
+                )
+              : result == null
+              ? const _LabEmptyState(
+                  icon: Icons.warning_amber_rounded,
+                  title: 'Boş sonuç',
+                  message:
+                      'Backend tamamlandı ancak gösterilecek sınav özeti dönmedi.',
+                )
+              : _ExamMorningContent(result: result),
+        ),
+        if (result != null && error == null && !loading)
+          _ResponsiveActions(
+            children: [
+              _SecondaryLabButton(
+                label: 'Koleksiyona ekle',
+                icon: Icons.bookmark_border_rounded,
+                onTap: onSave,
+                height: 64,
+              ),
+              _SecondaryLabButton(
+                label: 'Yeniden üret',
+                icon: Icons.refresh_rounded,
+                onTap: onRegenerate,
+                height: 64,
+              ),
+              _SecondaryLabButton(
+                label: 'Kopyala/Paylaş',
+                icon: Icons.ios_share_rounded,
+                onTap: onCopy,
+                height: 64,
+              ),
+              _SecondaryLabButton(
+                label: 'Kaynağa dön',
+                icon: Icons.folder_open_rounded,
+                onTap: onPickSources,
+                height: 64,
+              ),
+            ],
+          )
+        else if (!loading)
+          _PrimaryLabButton(
+            label: 'Yeniden üret',
+            icon: Icons.refresh_rounded,
+            onTap: onRegenerate,
+          ),
+      ],
+    );
+  }
+}
+
+class _ExamLoadingState extends StatelessWidget {
+  const _ExamLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    const messages = [
+      'Kaynak taranıyor',
+      'Yüksek verimli bilgiler seçiliyor',
+      'Karıştırılan noktalar ayrıştırılıyor',
+      'Sınav sabahı formatı hazırlanıyor',
+      'Son özet oluşturuluyor',
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        children: [
+          const CircularProgressIndicator(color: AppColors.blue),
+          const SizedBox(height: 20),
+          for (var i = 0; i < messages.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: i == 0
+                        ? AppColors.blue
+                        : AppColors.selectedBlue,
+                    child: Text(
+                      '${i + 1}',
+                      style: TextStyle(
+                        color: i == 0 ? Colors.white : AppColors.blue,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      messages[i],
+                      style: const TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExamMorningContent extends StatelessWidget {
+  const _ExamMorningContent({required this.result});
+
+  final _LabGenerationResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = result.content;
+    final map = content is Map ? content : const {};
+    final title = _examText(map['title']) ?? result.title;
+    final table = _examValueFor(map, const [
+      'mini_table',
+      'miniTable',
+      'table',
+    ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppColors.navy,
+            fontSize: 26,
+            height: 1.08,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _TagPill(label: 'Kaynak: ${result.sourceTitle}'),
+            _TagPill(label: result.createdAtLabel),
+            _TagPill(label: result.examSummaryMode ?? 'Sınav sabahı'),
+            _TagPill(label: result.examLengthTarget ?? '7 dakikalık'),
+            _TagPill(label: result.examOutputFormat ?? 'Madde madde'),
+            _TagPill(label: result.examQuality ?? 'Standart'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _LabNotice(text: result.mcCostLabel),
+        const SizedBox(height: 18),
+        _ExamSection(
+          title: 'Bölüm 1: Mutlaka bil',
+          icon: Icons.priority_high_rounded,
+          values: _examListFor(map, const [
+            'must_know',
+            'mutlaka_bil',
+            'high_yield',
+            'key_points',
+            'bulletPoints',
+          ]),
+        ),
+        _ExamSection(
+          title: 'Bölüm 2: En çok karıştırılanlar',
+          icon: Icons.compare_arrows_rounded,
+          values: _examListFor(map, const [
+            'commonly_confused',
+            'confusions',
+            'pitfalls',
+          ]),
+        ),
+        _ExamSection(
+          title: 'Bölüm 3: Klinik/TUS ipuçları',
+          icon: Icons.medical_information_outlined,
+          values: _examListFor(map, const [
+            'clinical_tus_tips',
+            'clinical_tips',
+            'tus_tips',
+            'red_flags',
+          ]),
+        ),
+        _ExamMiniTable(value: table),
+        _ExamSection(
+          title: 'Bölüm 4: Mini algoritmalar',
+          icon: Icons.account_tree_outlined,
+          values: _examListFor(map, const [
+            'algorithm_flow',
+            'algorithms',
+            'flows',
+            'mini_algorithms',
+          ]),
+        ),
+        _ExamSection(
+          title: 'Bölüm 5: Kendini yokla',
+          icon: Icons.quiz_outlined,
+          values: _examListFor(map, const [
+            'self_check',
+            'quick_qa',
+            'questions',
+            'qa',
+          ]),
+        ),
+        if (map.isEmpty) _LabGeneratedContent(content: content),
+      ],
+    );
+  }
+}
+
+class _ExamSection extends StatelessWidget {
+  const _ExamSection({
+    required this.title,
+    required this.icon,
+    required this.values,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<String> values;
+
+  @override
+  Widget build(BuildContext context) {
+    if (values.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.blue, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (final value in values)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: CircleAvatar(
+                      radius: 3,
+                      backgroundColor: AppColors.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: _LabGeneratedText(text: value)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExamMiniTable extends StatelessWidget {
+  const _ExamMiniTable({required this.value});
+
+  final Object? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = _examTableRows(value);
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.table_chart_outlined, color: AppColors.blue, size: 22),
+              SizedBox(width: 10),
+              Text(
+                'Bölüm 4: Mini tablo veya akış',
+                style: TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (final row in rows)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FBFF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                row,
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 14.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfographicBuilder extends StatelessWidget {
   const _InfographicBuilder({
     required this.selectedSources,
@@ -3693,6 +4581,100 @@ List<Object?>? _labPreferredList(Map<dynamic, dynamic> content) {
     if (value is List) return value.cast<Object?>();
   }
   return null;
+}
+
+Object? _examValueFor(Map<dynamic, dynamic> content, List<String> keys) {
+  for (final key in keys) {
+    final value = content[key];
+    if (value != null) return value;
+  }
+  return null;
+}
+
+List<String> _examListFor(Map<dynamic, dynamic> content, List<String> keys) {
+  return _examStringList(_examValueFor(content, keys));
+}
+
+List<String> _examStringList(Object? value) {
+  if (value == null) return const [];
+  if (value is List) {
+    return value
+        .map(_examText)
+        .whereType<String>()
+        .where((text) => text.trim().isNotEmpty)
+        .toList();
+  }
+  if (value is Map) {
+    return value.entries
+        .map((entry) {
+          final label = _humanizeLabLabel(entry.key.toString());
+          final text = _examText(entry.value);
+          if (text == null || text.trim().isEmpty) return null;
+          return '$label: $text';
+        })
+        .whereType<String>()
+        .toList();
+  }
+  final text = _examText(value);
+  if (text == null || text.isEmpty) return const [];
+  return text
+      .split(RegExp(r'\n+|•\s*'))
+      .map((item) => item.replaceFirst(RegExp(r'^[-*]\s*'), '').trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
+}
+
+String? _examText(Object? value) {
+  if (value == null) return null;
+  if (value is String) return value.trim();
+  if (value is num || value is bool) return value.toString();
+  if (value is List) {
+    return value.map(_examText).whereType<String>().join(' / ');
+  }
+  if (value is Map) {
+    final question = value['question'] ?? value['soru'];
+    final answer = value['answer'] ?? value['cevap'];
+    if (question != null || answer != null) {
+      return [
+        if (question != null) 'Soru: ${_examText(question)}',
+        if (answer != null) 'Cevap: ${_examText(answer)}',
+      ].join(' ');
+    }
+    return value.entries
+        .map((entry) {
+          final text = _examText(entry.value);
+          if (text == null || text.isEmpty) return null;
+          return '${_humanizeLabLabel(entry.key.toString())}: $text';
+        })
+        .whereType<String>()
+        .join(' | ');
+  }
+  return value.toString().trim();
+}
+
+List<String> _examTableRows(Object? value) {
+  if (value == null) return const [];
+  if (value is List) return _examStringList(value);
+  if (value is Map) {
+    final rows = value['rows'];
+    if (rows is List) {
+      return rows.map(_examText).whereType<String>().toList();
+    }
+    return _examStringList(value);
+  }
+  return _examStringList(value);
+}
+
+String _humanizeLabLabel(String value) {
+  final spaced = value
+      .replaceAll('_', ' ')
+      .replaceAllMapped(
+        RegExp(r'([a-z])([A-Z])'),
+        (match) => '${match.group(1)} ${match.group(2)}',
+      )
+      .trim();
+  if (spaced.isEmpty) return value;
+  return spaced[0].toUpperCase() + spaced.substring(1);
 }
 
 class _LabGeneratedItem extends StatelessWidget {

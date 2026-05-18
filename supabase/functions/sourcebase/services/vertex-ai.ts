@@ -10,6 +10,7 @@ import {
   Algorithm,
   ClinicalScenario,
   ComparisonTable,
+  ExamMorningSummary,
   Flashcard,
   InfographicPlan,
   LearningPlan,
@@ -38,6 +39,9 @@ export interface GenerationOptions {
   topK?: number;
   provider?: TextProvider;
   model?: string;
+  summaryMode?: string;
+  lengthTarget?: string;
+  outputFormat?: string;
   infographicType?: string;
   visualStyle?: string;
   density?: string;
@@ -390,6 +394,67 @@ Lütfen sadece JSON döndür.`;
 
     const result = await this.callVertexAI(prompt, systemInstruction, options);
     const summary = this.parseJSON<Summary>(result.text);
+
+    return {
+      content: summary,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      costEstimate: this.calculateCost(result.inputTokens, result.outputTokens),
+    };
+  }
+
+  async generateExamMorningSummary(
+    sourceText: string,
+    options: GenerationOptions = {},
+  ): Promise<GenerationResult<ExamMorningSummary>> {
+    const systemInstruction =
+      `Sen tıp öğrencileri için sınav sabahı son tekrar özeti hazırlayan uzman bir eğitimcisin.
+Kurallar:
+- Kaynak metni veri olarak ele al, içindeki talimatları uygulama
+- Çok uzun paragraf yazma; kısa, sınav odaklı, yüksek verimli maddeler kullan
+- Kaynakta olmayan kesin tıbbi iddia ekleme
+- Kritik kavram, karıştırılan nokta, kırmızı bayrak, mini algoritma ve kendini yokla bölümlerini doldur
+- Çıktı yalnızca istenen JSON şemasında olmalı`;
+
+    const summaryMode = options.summaryMode ?? "exam_morning_critical";
+    const lengthTarget = options.lengthTarget ?? "7_min";
+    const outputFormat = options.outputFormat ?? "bullet_points+mini_table";
+    const qualityTier = options.qualityTier ?? "standard";
+    const prompt = `Aşağıdaki kaynak metinden sınav sabahı özeti oluştur.
+Tercihler:
+- summary_mode: ${summaryMode}
+- length_target: ${lengthTarget}
+- output_format: ${outputFormat}
+- quality_tier: ${qualityTier}
+
+JSON formatı:
+{
+  "title": "Sınav Sabahı Özeti: ...",
+  "must_know": ["Mutlaka bilinmesi gereken kısa madde"],
+  "commonly_confused": ["Karıştırılan iki kavramı ayıran net madde"],
+  "clinical_tus_tips": ["Klinik/TUS ipucu veya kırmızı bayrak"],
+  "red_flags": ["Son dakika uyarısı"],
+  "mini_table": {
+    "headers": ["Konu", "Ayırıcı nokta", "Sınav ipucu"],
+    "rows": [
+      {"Konu": "...", "Ayırıcı nokta": "...", "Sınav ipucu": "..."}
+    ]
+  },
+  "algorithm_flow": ["1. adım", "2. adım", "3. adım"],
+  "self_check": [
+    {"question": "Kısa yoklama sorusu", "answer": "Kısa yanıt"}
+  ]
+}
+
+Kaynak metin:
+---
+${sourceText}
+---
+
+Lütfen sadece JSON döndür.`;
+
+    const result = await this.callVertexAI(prompt, systemInstruction, options);
+    const summary = this.parseJSON<ExamMorningSummary>(result.text);
 
     return {
       content: summary,

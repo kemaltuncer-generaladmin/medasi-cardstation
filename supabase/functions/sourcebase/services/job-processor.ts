@@ -219,6 +219,9 @@ type JobGenerationOptions = {
   maxTokens?: number;
   routeOptions?: RouteOptions;
   pricing?: McPricingQuote;
+  summaryMode?: string;
+  lengthTarget?: string;
+  outputFormat?: string;
   infographicType?: string;
   visualStyle?: string;
   density?: string;
@@ -277,6 +280,9 @@ export class JobProcessor {
           modelRoute: safeRouteMetadata(route),
           pricing: input.options?.pricing,
           generationOptions: {
+            summaryMode: input.options?.summaryMode,
+            lengthTarget: input.options?.lengthTarget,
+            outputFormat: input.options?.outputFormat,
             infographicType: input.options?.infographicType,
             visualStyle: input.options?.visualStyle,
             density: input.options?.density,
@@ -458,6 +464,9 @@ export class JobProcessor {
       maxTokens: options.maxTokens,
       provider: route.provider,
       model: route.model,
+      summaryMode: options.summaryMode,
+      lengthTarget: options.lengthTarget,
+      outputFormat: options.outputFormat,
       infographicType: options.infographicType,
       visualStyle: options.visualStyle,
       density: options.density,
@@ -486,6 +495,11 @@ export class JobProcessor {
         return this.withRoute(
           route,
           this.vertex.generateSummary(sourceText, routedOptions),
+        );
+      case "exam_morning_summary":
+        return this.withRoute(
+          route,
+          this.vertex.generateExamMorningSummary(sourceText, routedOptions),
         );
       case "algorithm":
         return this.withRoute(

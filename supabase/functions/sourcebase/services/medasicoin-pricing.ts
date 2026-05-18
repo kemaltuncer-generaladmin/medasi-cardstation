@@ -45,6 +45,7 @@ const SOURCE_MULTIPLIER_BPS: Record<SourceSizeTier, number> = {
 const MIN_UNITS: Record<string, Record<QualityTier, number>> = {
   central_ai: { economy: 5, standard: 10, premium: 200 },
   summary: { economy: 25, standard: 50, premium: 100 },
+  exam_morning_summary: { economy: 50, standard: 100, premium: 200 },
   flashcard: { economy: 25, standard: 75, premium: 150 },
   quiz: { economy: 50, standard: 100, premium: 200 },
   algorithm: { economy: 100, standard: 100, premium: 200 },
@@ -234,6 +235,8 @@ function defaultOutputTokens(
       return Math.max(1200, (count ?? 10) * 140);
     case "summary":
       return 1200;
+    case "exam_morning_summary":
+      return 1500;
     case "infographic":
       return 1600;
     case "central_ai":

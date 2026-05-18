@@ -51,6 +51,7 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = SourceBaseAuthBackend.currentUser;
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
     final displayName =
         user?.userMetadata?['display_name']?.toString().trim().isNotEmpty ==
             true
@@ -86,6 +87,13 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
         ),
+        if (isMobile) ...[
+          _ProfileActionStrip(
+            onOpenStore: onOpenStore,
+            onSignOut: () => _signOut(context),
+          ),
+          const SizedBox(height: 14),
+        ],
         _ProfileHeader(
           displayName: displayName,
           email: email,
@@ -153,11 +161,71 @@ class ProfileScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 32),
-        SBPrimaryButton(
-          label: 'Çıkış Yap',
-          icon: Icons.logout_rounded,
-          onPressed: () => _signOut(context),
-          size: SBButtonSize.medium,
+        if (!isMobile)
+          SBPrimaryButton(
+            label: 'Çıkış Yap',
+            icon: Icons.logout_rounded,
+            onPressed: () => _signOut(context),
+            size: SBButtonSize.medium,
+          ),
+      ],
+    );
+  }
+}
+
+class _ProfileActionStrip extends StatelessWidget {
+  const _ProfileActionStrip({
+    required this.onOpenStore,
+    required this.onSignOut,
+  });
+
+  final VoidCallback onOpenStore;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: onOpenStore,
+              icon: const Icon(Icons.storefront_rounded, size: 20),
+              label: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('Mağaza'),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.blue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: onSignOut,
+              icon: const Icon(Icons.logout_rounded, size: 20),
+              label: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('Çıkış Yap'),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.red,
+                side: const BorderSide(color: AppColors.red),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
         ),
       ],
     );

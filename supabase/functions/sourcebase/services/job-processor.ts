@@ -223,6 +223,11 @@ export type JobGenerationOptions = {
   summaryMode?: string;
   lengthTarget?: string;
   outputFormat?: string;
+  cardStyle?: string;
+  extractKeyConcepts?: boolean;
+  addHints?: boolean;
+  questionType?: string;
+  explanations?: boolean;
   algorithmType?: string;
   comparisonType?: string;
   tableFormat?: string;
@@ -303,6 +308,11 @@ export class JobProcessor {
             summaryMode: input.options?.summaryMode,
             lengthTarget: input.options?.lengthTarget,
             outputFormat: input.options?.outputFormat,
+            cardStyle: input.options?.cardStyle,
+            extractKeyConcepts: input.options?.extractKeyConcepts,
+            addHints: input.options?.addHints,
+            questionType: input.options?.questionType,
+            explanations: input.options?.explanations,
             algorithmType: input.options?.algorithmType,
             comparisonType: input.options?.comparisonType,
             tableFormat: input.options?.tableFormat,
@@ -555,6 +565,11 @@ export class JobProcessor {
       summaryMode: options.summaryMode,
       lengthTarget: options.lengthTarget,
       outputFormat: options.outputFormat,
+      cardStyle: options.cardStyle,
+      extractKeyConcepts: options.extractKeyConcepts,
+      addHints: options.addHints,
+      questionType: options.questionType,
+      explanations: options.explanations,
       algorithmType: options.algorithmType,
       comparisonType: options.comparisonType,
       tableFormat: options.tableFormat,

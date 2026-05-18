@@ -235,9 +235,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
     }
     final retryingAfterError = _latestResultSaveError != null;
     try {
-      await _api.createGeneratedOutput(
+      await _api.createGeneratedOutputByKind(
         fileId: result.sourceFileId!,
-        kind: result.kind,
+        kind: _baseForceOutputKind(result.kind),
         itemCount: _baseForceContentCount(result.content),
         jobId: result.jobId,
       );
@@ -309,6 +309,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
     if (kind == GeneratedKind.comparison || kind == GeneratedKind.table) {
       return _comparisonQualityValue(comparisonQuality);
     }
+    if (kind == GeneratedKind.summary) return 'standard';
     final difficulty = switch (kind) {
       GeneratedKind.flashcard => flashcardDifficulty,
       GeneratedKind.question => selectedQuestionDifficulty,
@@ -352,6 +353,29 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         'clinical': true,
       };
     }
+    if (kind == GeneratedKind.summary) {
+      return {
+        'summary_mode': _summaryModeValue(summaryFocus),
+        'length_target': _summaryLengthValue(summaryLength),
+        'output_format': summaryToTable
+            ? 'exam_morning_table_checklist'
+            : 'exam_morning_brief',
+        'quality_tier': 'standard',
+        'mark_terms': summaryMarkTerms,
+        'checklist': summaryChecklist,
+        'structured': true,
+        'clinical': true,
+      };
+    }
+    if (kind == GeneratedKind.flashcard) {
+      return {
+        'card_style': _flashcardStyleValue(flashcardStyle),
+        'difficulty': _difficultyValue(flashcardDifficulty),
+        'extract_key_concepts': flashcardExtractKey,
+        'add_hints': flashcardAddHints,
+        'structured': true,
+      };
+    }
     if (kind != GeneratedKind.question) return null;
     final clinical = questionType == 'Klinik Vaka';
     final hard =
@@ -366,7 +390,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
       'question_type': mode,
       'mode': mode,
       'style': clinical ? 'clinical' : 'exam',
-      'difficulty': hard ? 'hard' : selectedQuestionDifficulty.toLowerCase(),
+      'difficulty': hard
+          ? 'hard'
+          : _difficultyValue(selectedQuestionDifficulty),
       'clinical': clinical,
       'hard': hard,
       'explanations': questionAddExplanation,
@@ -449,24 +475,11 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
             : null,
         content: content,
       );
-      var resultSaved = false;
-      String? saveError;
-      try {
-        await _api.createGeneratedOutput(
-          fileId: file.id,
-          kind: kind,
-          itemCount: _baseForceContentCount(content),
-          jobId: jobId,
-        );
-        resultSaved = true;
-      } catch (error) {
-        saveError = _friendlyBaseForceError(error, kind: kind);
-      }
       if (!mounted) return;
       setState(() {
         _latestResult = result;
-        _latestResultSaved = resultSaved;
-        _latestResultSaveError = saveError;
+        _latestResultSaved = true;
+        _latestResultSaveError = null;
         _updateJobValue(
           job.localId,
           status: _JobUiStatus.completed,
@@ -840,13 +853,23 @@ class _GenerationResult {
 String _baseForceJobType(GeneratedKind kind) {
   return switch (kind) {
     GeneratedKind.flashcard => 'flashcard',
-    GeneratedKind.question => 'question',
-    GeneratedKind.summary => 'summary',
+    GeneratedKind.question => 'quiz',
+    GeneratedKind.summary => 'exam_morning_summary',
     GeneratedKind.algorithm => 'algorithm',
     GeneratedKind.comparison || GeneratedKind.table => 'comparison',
     GeneratedKind.podcast => 'podcast',
     GeneratedKind.infographic => 'infographic',
     GeneratedKind.mindMap => 'algorithm',
+  };
+}
+
+String _baseForceOutputKind(GeneratedKind kind) {
+  return switch (kind) {
+    GeneratedKind.question => 'question',
+    GeneratedKind.summary => 'exam_morning_summary',
+    GeneratedKind.table => 'comparison',
+    GeneratedKind.mindMap => 'mind_map',
+    _ => kind.name,
   };
 }
 
@@ -929,7 +952,7 @@ String _baseForceTitle(GeneratedKind kind) {
   return switch (kind) {
     GeneratedKind.flashcard => 'Flashcard Seti',
     GeneratedKind.question => 'Soru Seti',
-    GeneratedKind.summary => 'Özet',
+    GeneratedKind.summary => 'Sınav Sabahı Özeti',
     GeneratedKind.algorithm => 'Algoritma',
     GeneratedKind.comparison || GeneratedKind.table => 'Karşılaştırma',
     GeneratedKind.podcast => 'Podcast',
@@ -942,12 +965,44 @@ String _baseForceKindLabel(GeneratedKind kind) {
   return switch (kind) {
     GeneratedKind.flashcard => 'Flashcard',
     GeneratedKind.question => 'Soru',
-    GeneratedKind.summary => 'Özet',
+    GeneratedKind.summary => 'Sınav Sabahı Özeti',
     GeneratedKind.algorithm => 'Algoritma',
     GeneratedKind.comparison || GeneratedKind.table => 'Tablo',
     GeneratedKind.podcast => 'Podcast',
     GeneratedKind.infographic => 'İnfografik',
     GeneratedKind.mindMap => 'Zihin Haritası',
+  };
+}
+
+String _flashcardStyleValue(String label) {
+  return switch (label) {
+    'Cloze' => 'cloze',
+    'Hızlı Tekrar' => 'rapid_review',
+    _ => 'classic',
+  };
+}
+
+String _summaryLengthValue(String label) {
+  return switch (label) {
+    '3 sayfa' => 'three_pages',
+    'Ultra kısa' => 'ultra_brief',
+    _ => 'one_page',
+  };
+}
+
+String _summaryModeValue(String label) {
+  return switch (label) {
+    'Kritik Noktalar' => 'critical_points',
+    'Hoca Vurguları' => 'teacher_emphasis',
+    _ => 'high_yield_questions',
+  };
+}
+
+String _difficultyValue(String label) {
+  return switch (label) {
+    'Kolay' => 'easy',
+    'Zor' || 'Çok Zor' => 'hard',
+    _ => 'medium',
   };
 }
 
@@ -1160,6 +1215,11 @@ String _friendlyBaseForceError(Object error, {GeneratedKind? kind}) {
     if (isComparison) return comparisonFallback;
     return 'AI servisi şu anda yanıt veremiyor. Biraz sonra tekrar deneyin.';
   }
+  if (_looksLikeTechnicalBaseForceError(text)) {
+    if (isAlgorithm) return algorithmFallback;
+    if (isComparison) return comparisonFallback;
+    return 'AI üretimi şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
+  }
   if (isAlgorithm && text.toLowerCase().contains('ai üretimi başarısız')) {
     return algorithmFallback;
   }
@@ -1167,6 +1227,21 @@ String _friendlyBaseForceError(Object error, {GeneratedKind? kind}) {
     return comparisonFallback;
   }
   return text;
+}
+
+bool _looksLikeTechnicalBaseForceError(String text) {
+  final lower = text.toLowerCase();
+  return lower.contains('stack trace') ||
+      lower.contains(' at ') ||
+      lower.contains('null') ||
+      lower.contains('undefined') ||
+      lower.contains('typeerror') ||
+      lower.contains('referenceerror') ||
+      lower.contains('syntaxerror') ||
+      lower.contains('edge function') ||
+      lower.contains('internal server error') ||
+      lower.contains('failed to fetch') ||
+      RegExp(r'\b[A-Z0-9_]{4,}_FAILED\b').hasMatch(text);
 }
 
 String _baseForceProgressLabel(
@@ -2539,6 +2614,17 @@ class _SummaryFactoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DriveFile? readyFile;
+    for (final file in data.recentFiles) {
+      if (selectedSources.contains(file.id) && _isBaseForceReadySource(file)) {
+        readyFile = file;
+        break;
+      }
+    }
+    final canGenerate = readyFile != null;
+    final sourceStatus = readyFile == null
+        ? 'Hazır kaynak seçilmedi'
+        : '${readyFile.title} • ${readyFile.sizeLabel} • ${_baseForceReadyLabel(readyFile)}';
     return _BaseForcePage(
       title: 'S\u0131nav Sabah\u0131 \xD6zeti',
       subtitle:
@@ -2578,41 +2664,45 @@ class _SummaryFactoryScreen extends StatelessWidget {
         const SizedBox(height: 20),
         const _SummaryPreviewCard(),
         const SizedBox(height: 18),
-        const _ProductionSummary(
+        _ProductionSummary(
           items: [
             _SummaryItemData(
               Icons.description_rounded,
-              '1 sayfa',
+              summaryLength,
               'Tahmini uzunluk',
               AppColors.blue,
             ),
             _SummaryItemData(
-              Icons.menu_book_rounded,
-              '8 başlık',
-              'Özet başlık sayısı',
+              Icons.track_changes_rounded,
+              summaryFocus,
+              'Odak modu',
               AppColors.purple,
             ),
             _SummaryItemData(
               Icons.layers_rounded,
-              '3 kaynak',
-              'Seçili kaynak sayısı',
+              sourceStatus,
+              'Seçili kaynak',
               AppColors.cyan,
             ),
             _SummaryItemData(
-              Icons.track_changes_rounded,
-              'Sınav odaklı',
-              'Seçilmiş odak modu',
+              Icons.payments_outlined,
+              'Güvenli hesaplanır',
+              'MC maliyeti',
               AppColors.green,
             ),
           ],
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: 'Özeti Oluştur',
+          label: canGenerate ? 'Özeti Oluştur' : 'Hazır Kaynak Seç',
           icon: Icons.auto_awesome_rounded,
           height: 58,
-          onTap: onGenerate,
+          onTap: canGenerate ? onGenerate : null,
         ),
+        if (!canGenerate) ...[
+          const SizedBox(height: 8),
+          _SourceRequiredNotice(onPickSources: onPickSources),
+        ],
       ],
     );
   }
@@ -3453,53 +3543,131 @@ class _GeneratedContentView extends StatelessWidget {
         result.kind == GeneratedKind.table) {
       return _ComparisonResultView(result: result);
     }
-    if (content is List) {
+    Widget withMeta(Widget child) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var i = 0; i < content.length; i++)
-            _GeneratedItemCard(index: i + 1, value: content[i]),
+          _GenericResultMetaGrid(result: result),
+          const SizedBox(height: 16),
+          child,
         ],
+      );
+    }
+
+    if (content is List) {
+      return withMeta(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < content.length; i++)
+              _GeneratedItemCard(index: i + 1, value: content[i]),
+          ],
+        ),
       );
     }
     if (content is Map) {
       final preferred = _preferredGeneratedList(content);
       if (preferred != null && preferred.isNotEmpty) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if ((content['title']?.toString().trim() ?? '').isNotEmpty) ...[
-              Text(
-                content['title'].toString(),
-                style: const TextStyle(
-                  color: AppColors.navy,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
+        return withMeta(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if ((content['title']?.toString().trim() ?? '').isNotEmpty) ...[
+                Text(
+                  content['title'].toString(),
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
+                const SizedBox(height: 14),
+              ],
+              for (var i = 0; i < preferred.length; i++)
+                _GeneratedItemCard(index: i + 1, value: preferred[i]),
             ],
-            for (var i = 0; i < preferred.length; i++)
-              _GeneratedItemCard(index: i + 1, value: preferred[i]),
-          ],
+          ),
         );
       }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final entry in content.entries)
-            _GeneratedKeyValue(label: entry.key.toString(), value: entry.value),
-        ],
+      return withMeta(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final entry in content.entries)
+              _GeneratedKeyValue(
+                label: entry.key.toString(),
+                value: entry.value,
+              ),
+          ],
+        ),
       );
     }
-    return Text(
-      content.toString(),
-      style: const TextStyle(
-        color: AppColors.navy,
-        fontSize: 16,
-        height: 1.45,
-        fontWeight: FontWeight.w500,
+    return withMeta(
+      Text(
+        content.toString(),
+        style: const TextStyle(
+          color: AppColors.navy,
+          fontSize: 16,
+          height: 1.45,
+          fontWeight: FontWeight.w500,
+        ),
       ),
+    );
+  }
+}
+
+class _GenericResultMetaGrid extends StatelessWidget {
+  const _GenericResultMetaGrid({required this.result});
+
+  final _GenerationResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      ('Kaynak', result.sourceTitle),
+      ('Üretim tarihi', result.createdAtLabel ?? 'Bugün'),
+      ('Tür', _baseForceKindLabel(result.kind)),
+      ('MC', result.mcCostLabel ?? 'MC tutarı güvenli hesaplanır'),
+    ];
+    return _ResponsiveGrid(
+      minItemWidth: 155,
+      children: [
+        for (final item in items)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FBFF),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.$1,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  item.$2,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -5530,7 +5698,7 @@ class _SourceSelectRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = source.enabled;
     return InkWell(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Opacity(
@@ -6379,7 +6547,7 @@ class _StepperSettingState extends State<_StepperSetting> {
   }
 
   void _change(int delta) {
-    final next = math.max(1, value + delta);
+    final next = math.min(100, math.max(1, value + delta));
     setState(() => value = next);
     widget.onChanged?.call(next);
   }

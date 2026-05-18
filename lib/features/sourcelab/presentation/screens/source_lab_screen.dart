@@ -829,6 +829,7 @@ class _SourceLabHome extends StatelessWidget {
           subtitle:
               'Drive’dan gelen kaynaklar klinik öğrenme\nve kişisel çalışma araçlarına dönüştürülür.',
           art: _HeroArtKind.lab,
+          tight: true,
           chips: const [
             _MiniHeroChip(icon: Icons.verified_user_outlined, label: 'Güvenli'),
             _MiniHeroChip(icon: Icons.bolt_outlined, label: 'Hızlı'),
@@ -895,8 +896,14 @@ class _HomeContinuePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 420;
     return _LabPanel(
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 16 : 22,
+        compact ? 16 : 22,
+        compact ? 16 : 22,
+        compact ? 16 : 20,
+      ),
       child: Column(
         children: [
           LayoutBuilder(
@@ -917,7 +924,7 @@ class _HomeContinuePanel extends StatelessWidget {
                           'Drive’dan Devam Et',
                           style: TextStyle(
                             color: AppColors.navy,
-                            fontSize: 24,
+                            fontSize: 22,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -940,6 +947,7 @@ class _HomeContinuePanel extends StatelessWidget {
                     ? Icons.folder_open_rounded
                     : Icons.arrow_forward_rounded,
                 onTap: sources.isEmpty ? onPickSources : onContinue,
+                height: compact ? 54 : 60,
               );
 
               if (compact) {
@@ -958,13 +966,15 @@ class _HomeContinuePanel extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: 20),
-          _SourceGrid(
-            sources: sources,
-            allowRemove: false,
-            onRemove: (_) {},
-            onMenu: onPickSources,
-          ),
+          if (sources.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _SourceGrid(
+              sources: sources,
+              allowRemove: false,
+              onRemove: (_) {},
+              onMenu: onPickSources,
+            ),
+          ],
         ],
       ),
     );
@@ -1057,44 +1067,47 @@ class _ToolCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 420;
     return _LabPanel(
-      padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
+      padding: EdgeInsets.fromLTRB(12, compact ? 14 : 18, 12, 12),
       radius: 16,
       child: Column(
         children: [
           Container(
-            width: 58,
-            height: 58,
+            width: compact ? 48 : 58,
+            height: compact ? 48 : 58,
             decoration: BoxDecoration(
               color: spec.color.withValues(alpha: .16),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(spec.icon, color: spec.color, size: 34),
+            child: Icon(spec.icon, color: spec.color, size: compact ? 28 : 34),
           ),
-          const SizedBox(height: 15),
+          SizedBox(height: compact ? 10 : 15),
           Text(
             spec.title,
             textAlign: TextAlign.center,
             maxLines: 2,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.navy,
-              fontSize: 18,
+              fontSize: compact ? 16 : 18,
               height: 1.08,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 9),
+          SizedBox(height: compact ? 7 : 9),
           Text(
             spec.subtitle,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            maxLines: compact ? 2 : 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
               color: AppColors.muted,
-              fontSize: 13,
+              fontSize: compact ? 12 : 13,
               height: 1.23,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 13),
+          SizedBox(height: compact ? 9 : 13),
           _SmallActionButton(label: 'Başlat', onTap: onTap),
         ],
       ),
@@ -3313,9 +3326,13 @@ class _LabHero extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 620;
         final artWidth = compact
-            ? math.min(constraints.maxWidth, 300.0)
+            ? (tight
+                  ? math.min(constraints.maxWidth, 172.0)
+                  : math.min(constraints.maxWidth, 250.0))
             : (tight ? 360.0 : 430.0);
-        final artHeight = compact ? 214.0 : (tight ? 210.0 : 260.0);
+        final artHeight = compact
+            ? (tight ? 96.0 : 170.0)
+            : (tight ? 210.0 : 260.0);
 
         final copy = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3350,18 +3367,19 @@ class _LabHero extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: SizedBox(
-                    width: artWidth,
-                    height: artHeight,
-                    child: ClipRect(child: _HeroArt(kind: art)),
-                  ),
-                ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 18),
+                  padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
                   child: copy,
                 ),
+                if (!tight)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
+                      width: artWidth,
+                      height: artHeight,
+                      child: ClipRect(child: _HeroArt(kind: art)),
+                    ),
+                  ),
               ],
             ),
           );

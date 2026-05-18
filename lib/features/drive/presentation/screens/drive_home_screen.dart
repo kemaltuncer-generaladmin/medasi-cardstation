@@ -135,6 +135,7 @@ class DriveHomeScreen extends StatelessWidget {
         ),
         const SizedBox(height: 22),
         const TrustStrip(),
+        const WorkspaceBottomNavGuard(),
       ],
     );
   }

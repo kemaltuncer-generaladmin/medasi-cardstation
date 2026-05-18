@@ -2364,7 +2364,7 @@ class _LabScroll extends StatelessWidget {
     final isMobile = width < 600;
     final topPadding = MediaQuery.viewPaddingOf(context).top + 12;
     final bottomPadding = isMobile
-        ? SourceBaseBottomNav.contentBottomPadding(context)
+        ? SourceBaseBottomNav.scrollEndPadding(context)
         : 48.0;
     return Center(
       child: ConstrainedBox(
@@ -2383,6 +2383,7 @@ class _LabScroll extends StatelessWidget {
               child,
               const SizedBox(height: 16),
             ],
+            if (isMobile) const WorkspaceBottomNavGuard(),
           ],
         ),
       ),

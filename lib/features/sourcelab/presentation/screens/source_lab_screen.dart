@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' hide Color, Gradient, Image, TextStyle;
 
@@ -79,11 +80,10 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
   bool podcastPlaying = false;
   double podcastPosition = 0;
 
+  String infographicType = 'Klinik Akış';
   String infographicStyle = 'Akademik';
-  String infographicSize = 'Dikey';
-  String infographicDensity = 'Orta';
-  Color infographicAccent = AppColors.blue;
-  bool showInfographicSources = true;
+  String infographicDensity = 'Dengeli';
+  String infographicQuality = 'Standart';
 
   String mapKind = 'Konu Bazlı';
   String mapDepth = 'Orta';
@@ -121,6 +121,15 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
       _showSourcePicker();
       return;
     }
+    final unavailable = selectedSources
+        .where((source) => source.disabledReason != null)
+        .map((source) => source.disabledReason!)
+        .toSet()
+        .join(' ');
+    if (unavailable.isNotEmpty) {
+      _toast(unavailable);
+      return;
+    }
     final file = _driveFileForSource(selectedSources.first);
     if (file == null || file.id.trim().isEmpty) {
       _toast('Seçilen kaynak Drive kaydıyla eşleşmiyor.');
@@ -153,6 +162,19 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
       final createResponse = await _api.createGenerationJob(
         fileId: file.id,
         jobType: jobType,
+        sourceIds: selectedSources.map((source) => source.id).toList(),
+        qualityTier: tool == _ToolKind.infographic
+            ? _infographicQualityValue(infographicQuality)
+            : null,
+        options: tool == _ToolKind.infographic
+            ? _infographicPayloadOptions(
+                type: infographicType,
+                style: infographicStyle,
+                density: infographicDensity,
+                quality: infographicQuality,
+                source: selectedSources.first,
+              )
+            : null,
       );
       final data = createResponse['data'];
       final jobId = data is Map ? data['jobId']?.toString().trim() ?? '' : '';
@@ -167,6 +189,22 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
           tool: tool,
           title: _sourceLabToolTitle(tool),
           sourceTitle: file.title,
+          sourceCount: selectedSources.length,
+          jobId: jobId,
+          createdAtLabel: _sourceLabDateTimeLabel(DateTime.now()),
+          mcCostLabel: _mcCostLabel(data),
+          infographicType: tool == _ToolKind.infographic
+              ? infographicType
+              : null,
+          infographicStyle: tool == _ToolKind.infographic
+              ? infographicStyle
+              : null,
+          infographicDensity: tool == _ToolKind.infographic
+              ? infographicDensity
+              : null,
+          infographicQuality: tool == _ToolKind.infographic
+              ? infographicQuality
+              : null,
           content: content,
         );
       });
@@ -191,12 +229,15 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
         return contentData is Map ? contentData['content'] : null;
       }
       if (status == 'failed') {
+        final code = data is Map ? data['errorCode']?.toString() : null;
         final message = data is Map
             ? data['errorMessage']?.toString()
             : 'AI üretimi başarısız oldu.';
-        throw StateError(message == null || message.trim().isEmpty
-            ? 'AI üretimi başarısız oldu.'
-            : message);
+        throw StateError(
+          message == null || message.trim().isEmpty
+              ? 'AI üretimi başarısız oldu.'
+              : [code, message].whereType<String>().join(': '),
+        );
       }
       await Future<void>.delayed(const Duration(seconds: 2));
     }
@@ -221,7 +262,9 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
       _toast('${result.title} için kaydetme backend desteği bekleniyor.');
       return;
     }
-    final file = selectedSources.isEmpty ? null : _driveFileForSource(selectedSources.first);
+    final file = selectedSources.isEmpty
+        ? null
+        : _driveFileForSource(selectedSources.first);
     if (file == null || file.id.trim().isEmpty) {
       _toast('Kaydetmek için geçerli Drive kaynağı bulunamadı.');
       return;
@@ -250,7 +293,9 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
       _toast('Paylaşılacak üretim sonucu yok.');
       return;
     }
-    await Clipboard.setData(ClipboardData(text: _plainTextForLabResult(result)));
+    await Clipboard.setData(
+      ClipboardData(text: _plainTextForLabResult(result)),
+    );
     if (!mounted) return;
     _toast('Sonuç metni panoya kopyalandı.');
   }
@@ -299,6 +344,10 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
         return StatefulBuilder(
           builder: (context, modalSetState) {
             void toggle(_LabSource source) {
+              if (!source.isSelectable) {
+                _toast(source.disabledReason ?? 'Bu kaynak seçilemez.');
+                return;
+              }
               modalSetState(() {
                 if (selectedIds.contains(source.id)) {
                   if (selectedIds.length == 1) {
@@ -337,7 +386,8 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                         child: _LabEmptyState(
                           icon: Icons.folder_off_outlined,
                           title: 'Drive kaynağı yok',
-                          message: 'SourceLab üretimi için önce Drive’a dosya yükleyin.',
+                          message:
+                              'SourceLab üretimi için önce Drive’a dosya yükleyin.',
                         ),
                       )
                     else
@@ -353,7 +403,8 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                               onTap: () => toggle(source),
                             );
                           },
-                          separatorBuilder: (_, _) => const SizedBox(height: 10),
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 10),
                           itemCount: pool.length,
                         ),
                       ),
@@ -361,20 +412,23 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                     _PrimaryLabButton(
                       label: 'Seçimi Kullan',
                       icon: Icons.check_rounded,
-                      onTap: () {
-                        if (selectedIds.isEmpty) {
-                          _toast('En az bir kaynak seçin.');
-                          return;
-                        }
-                        setState(() {
-                          selectedSources = pool
-                              .where(
-                                (source) => selectedIds.contains(source.id),
-                              )
-                              .toList();
-                        });
-                        Navigator.of(context).pop();
-                      },
+                      onTap: selectedIds.isEmpty
+                          ? null
+                          : () {
+                              if (selectedIds.isEmpty) {
+                                _toast('En az bir kaynak seçin.');
+                                return;
+                              }
+                              setState(() {
+                                selectedSources = pool
+                                    .where(
+                                      (source) =>
+                                          selectedIds.contains(source.id),
+                                    )
+                                    .toList();
+                              });
+                              Navigator.of(context).pop();
+                            },
                     ),
                   ],
                 ),
@@ -395,198 +449,208 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
           child: KeyedSubtree(
             key: ValueKey(view),
             child: switch (view) {
-          SourceLabView.home => _SourceLabHome(
-            selectedSources: selectedSources,
-            onSearch: widget.onSearch,
-            onPickSources: _showSourcePicker,
-            onOpenTool: _openTool,
-            onContinue: () => _openTool(_ToolKind.clinical),
-            onToast: _toast,
-          ),
-          SourceLabView.clinicalBuilder => _ClinicalScenarioBuilder(
-            selectedSources: selectedSources,
-            clinicalType: clinicalType,
-            difficulty: clinicalDifficulty,
-            level: clinicalLevel,
-            branch: clinicalBranch,
-            patientAge: patientAge,
-            feedback: clinicalFeedback,
-            onBack: _back,
-            onSearch: widget.onSearch,
-            onPickSources: _showSourcePicker,
-            onRemoveSource: _removeSource,
-            onClinicalType: (value) => setState(() => clinicalType = value),
-            onDifficulty: (value) => setState(() => clinicalDifficulty = value),
-            onLevel: (value) => setState(() => clinicalLevel = value),
-            onBranch: (value) => setState(() => clinicalBranch = value),
-            onAge: (value) => setState(() => patientAge = value),
-            onFeedback: (value) => setState(() => clinicalFeedback = value),
-            onGenerate: () => _generate(SourceLabView.clinicalResult, _ToolKind.clinical),
-          ),
-          SourceLabView.clinicalResult => _ClinicalScenarioResult(
-            loading: _isLoading,
-            result: _labResult,
-            error: _labError,
-            onBack: _back,
-            onSearch: widget.onSearch,
-            onSave: () {
-              _saveLabResult();
-            },
-            onExport: _copyLabResult,
-            onRegenerate: () => _open(SourceLabView.clinicalBuilder),
-            onComplete: _unsupportedExport,
-          ),
-          SourceLabView.planBuilder => _LearningPlanBuilder(
-            selectedSources: selectedSources,
-            goal: planGoal,
-            priority: planPriority,
-            intensity: planIntensity,
-            days: planDays,
-            dailyDuration: dailyDuration,
-            includeReviews: includeReviews,
-            onBack: _back,
-            onSearch: widget.onSearch,
-            onPickSources: _showSourcePicker,
-            onGoal: (value) => setState(() => planGoal = value),
-            onPriority: (value) => setState(() => planPriority = value),
-            onIntensity: (value) => setState(() => planIntensity = value),
-            onDaysChanged: (value) => setState(() => planDays = value),
-            onDuration: (value) => setState(() => dailyDuration = value),
-            onReviews: (value) => setState(() => includeReviews = value),
-            onGenerate: () => _generate(SourceLabView.planResult, _ToolKind.plan),
-          ),
-          SourceLabView.planResult => _LearningPlanResult(
-            selectedSources: selectedSources,
-            planDays: planDays,
-            planGoal: planGoal,
-            loading: _isLoading,
-            result: _labResult,
-            error: _labError,
-            onBack: _back,
-            onSave: () {
-              _saveLabResult();
-            },
-            onCalendar: _unsupportedExport,
-            onExport: _copyLabResult,
-            onRegenerate: () => _open(SourceLabView.planBuilder),
-          ),
-          SourceLabView.podcastBuilder => _PodcastBuilder(
-            selectedSources: selectedSources,
-            voice: podcastVoice,
-            duration: podcastDuration,
-            focus: podcastFocus,
-            pace: podcastPace,
-            includeMiniQuiz: includeMiniQuiz,
-            onBack: _back,
-            onSearch: widget.onSearch,
-            onPickSources: _showSourcePicker,
-            onRemoveSource: _removeSource,
-            onVoice: (value) => setState(() => podcastVoice = value),
-            onDuration: (value) => setState(() => podcastDuration = value),
-            onFocus: (value) => setState(() => podcastFocus = value),
-            onPace: (value) => setState(() => podcastPace = value),
-            onMiniQuiz: (value) => setState(() => includeMiniQuiz = value),
-            onGenerate: () => _generate(SourceLabView.podcastResult, _ToolKind.podcast),
-          ),
-          SourceLabView.podcastResult => _PodcastResult(
-            playing: podcastPlaying,
-            position: podcastPosition,
-            loading: _isLoading,
-            result: _labResult,
-            error: _labError,
-            onBack: _back,
-            onTogglePlay: () => _toast('Ses dosyası üretilmedi; metinsel podcast scripti gösteriliyor.'),
-            onPosition: (value) => setState(() => podcastPosition = value),
-            onSpeed: _unsupportedExport,
-            onShare: _copyLabResult,
-            onExport: _copyLabResult,
-            onRegenerate: () => _open(SourceLabView.podcastBuilder),
-            onSave: () {
-              _saveLabResult();
-            },
-            onSkipBack: () {
-              setState(() {
-                podcastPosition = math.max(0, podcastPosition - .08);
-              });
-            },
-            onSkipForward: () {
-              setState(() {
-                podcastPosition = math.min(1, podcastPosition + .08);
-              });
-            },
-            onVolume: _unsupportedExport,
-          ),
-          SourceLabView.infographicBuilder => _InfographicBuilder(
-            selectedSources: selectedSources,
-            style: infographicStyle,
-            size: infographicSize,
-            density: infographicDensity,
-            accent: infographicAccent,
-            showSources: showInfographicSources,
-            onBack: _back,
-            onSearch: widget.onSearch,
-            onPickSources: _showSourcePicker,
-            onStyle: (value) => setState(() => infographicStyle = value),
-            onSize: (value) => setState(() => infographicSize = value),
-            onDensity: (value) => setState(() => infographicDensity = value),
-            onAccent: (value) => setState(() => infographicAccent = value),
-            onShowSources: (value) =>
-                setState(() => showInfographicSources = value),
-            onGenerate: () => _generate(SourceLabView.infographicResult, _ToolKind.infographic),
-          ),
-          SourceLabView.infographicResult => _InfographicResult(
-            loading: _isLoading,
-            result: _labResult,
-            error: _labError,
-            onBack: _back,
-            onSearch: widget.onSearch,
-            onSave: () {
-              _saveLabResult();
-            },
-            onPng: _copyLabResult,
-            onPdf: _copyLabResult,
-            onRegenerate: () => _open(SourceLabView.infographicBuilder),
-          ),
-          SourceLabView.mindMapBuilder => _MindMapBuilder(
-            selectedSources: selectedSources,
-            mapKind: mapKind,
-            depth: mapDepth,
-            look: mapLook,
-            topics: mapTopics,
-            expandChildren: expandChildren,
-            onBack: _back,
-            onSearch: widget.onSearch,
-            onPickSources: _showSourcePicker,
-            onRemoveSource: _removeSource,
-            onMapKind: (value) => setState(() => mapKind = value),
-            onDepth: (value) => setState(() => mapDepth = value),
-            onLook: (value) => setState(() => mapLook = value),
-            onToggleTopic: (topic) {
-              setState(() {
-                if (mapTopics.contains(topic)) {
-                  if (mapTopics.length == 1) {
-                    return;
-                  }
-                  mapTopics.remove(topic);
-                } else {
-                  mapTopics.add(topic);
-                }
-              });
-            },
-            onExpandChildren: (value) => setState(() => expandChildren = value),
-            onGenerate: () => _generate(SourceLabView.mindMapResult, _ToolKind.mindMap),
-          ),
-          SourceLabView.mindMapResult => _MindMapResult(
-            loading: _isLoading,
-            result: _labResult,
-            error: _labError,
-            onBack: _back,
-            onSave: () {
-              _saveLabResult();
-            },
-            onExport: _copyLabResult,
-            onRegenerate: () => _open(SourceLabView.mindMapBuilder),
-          ),
+              SourceLabView.home => _SourceLabHome(
+                selectedSources: selectedSources,
+                onSearch: widget.onSearch,
+                onPickSources: _showSourcePicker,
+                onOpenTool: _openTool,
+                onContinue: () => _openTool(_ToolKind.clinical),
+                onToast: _toast,
+              ),
+              SourceLabView.clinicalBuilder => _ClinicalScenarioBuilder(
+                selectedSources: selectedSources,
+                clinicalType: clinicalType,
+                difficulty: clinicalDifficulty,
+                level: clinicalLevel,
+                branch: clinicalBranch,
+                patientAge: patientAge,
+                feedback: clinicalFeedback,
+                onBack: _back,
+                onSearch: widget.onSearch,
+                onPickSources: _showSourcePicker,
+                onRemoveSource: _removeSource,
+                onClinicalType: (value) => setState(() => clinicalType = value),
+                onDifficulty: (value) =>
+                    setState(() => clinicalDifficulty = value),
+                onLevel: (value) => setState(() => clinicalLevel = value),
+                onBranch: (value) => setState(() => clinicalBranch = value),
+                onAge: (value) => setState(() => patientAge = value),
+                onFeedback: (value) => setState(() => clinicalFeedback = value),
+                onGenerate: () =>
+                    _generate(SourceLabView.clinicalResult, _ToolKind.clinical),
+              ),
+              SourceLabView.clinicalResult => _ClinicalScenarioResult(
+                loading: _isLoading,
+                result: _labResult,
+                error: _labError,
+                onBack: _back,
+                onSearch: widget.onSearch,
+                onSave: () {
+                  _saveLabResult();
+                },
+                onExport: _copyLabResult,
+                onRegenerate: () => _open(SourceLabView.clinicalBuilder),
+                onComplete: _unsupportedExport,
+              ),
+              SourceLabView.planBuilder => _LearningPlanBuilder(
+                selectedSources: selectedSources,
+                goal: planGoal,
+                priority: planPriority,
+                intensity: planIntensity,
+                days: planDays,
+                dailyDuration: dailyDuration,
+                includeReviews: includeReviews,
+                onBack: _back,
+                onSearch: widget.onSearch,
+                onPickSources: _showSourcePicker,
+                onGoal: (value) => setState(() => planGoal = value),
+                onPriority: (value) => setState(() => planPriority = value),
+                onIntensity: (value) => setState(() => planIntensity = value),
+                onDaysChanged: (value) => setState(() => planDays = value),
+                onDuration: (value) => setState(() => dailyDuration = value),
+                onReviews: (value) => setState(() => includeReviews = value),
+                onGenerate: () =>
+                    _generate(SourceLabView.planResult, _ToolKind.plan),
+              ),
+              SourceLabView.planResult => _LearningPlanResult(
+                selectedSources: selectedSources,
+                planDays: planDays,
+                planGoal: planGoal,
+                loading: _isLoading,
+                result: _labResult,
+                error: _labError,
+                onBack: _back,
+                onSave: () {
+                  _saveLabResult();
+                },
+                onCalendar: _unsupportedExport,
+                onExport: _copyLabResult,
+                onRegenerate: () => _open(SourceLabView.planBuilder),
+              ),
+              SourceLabView.podcastBuilder => _PodcastBuilder(
+                selectedSources: selectedSources,
+                voice: podcastVoice,
+                duration: podcastDuration,
+                focus: podcastFocus,
+                pace: podcastPace,
+                includeMiniQuiz: includeMiniQuiz,
+                onBack: _back,
+                onSearch: widget.onSearch,
+                onPickSources: _showSourcePicker,
+                onRemoveSource: _removeSource,
+                onVoice: (value) => setState(() => podcastVoice = value),
+                onDuration: (value) => setState(() => podcastDuration = value),
+                onFocus: (value) => setState(() => podcastFocus = value),
+                onPace: (value) => setState(() => podcastPace = value),
+                onMiniQuiz: (value) => setState(() => includeMiniQuiz = value),
+                onGenerate: () =>
+                    _generate(SourceLabView.podcastResult, _ToolKind.podcast),
+              ),
+              SourceLabView.podcastResult => _PodcastResult(
+                playing: podcastPlaying,
+                position: podcastPosition,
+                loading: _isLoading,
+                result: _labResult,
+                error: _labError,
+                onBack: _back,
+                onTogglePlay: () => _toast(
+                  'Ses dosyası üretilmedi; metinsel podcast scripti gösteriliyor.',
+                ),
+                onPosition: (value) => setState(() => podcastPosition = value),
+                onSpeed: _unsupportedExport,
+                onShare: _copyLabResult,
+                onExport: _copyLabResult,
+                onRegenerate: () => _open(SourceLabView.podcastBuilder),
+                onSave: () {
+                  _saveLabResult();
+                },
+                onSkipBack: () {
+                  setState(() {
+                    podcastPosition = math.max(0, podcastPosition - .08);
+                  });
+                },
+                onSkipForward: () {
+                  setState(() {
+                    podcastPosition = math.min(1, podcastPosition + .08);
+                  });
+                },
+                onVolume: _unsupportedExport,
+              ),
+              SourceLabView.infographicBuilder => _InfographicBuilder(
+                selectedSources: selectedSources,
+                type: infographicType,
+                style: infographicStyle,
+                density: infographicDensity,
+                quality: infographicQuality,
+                onBack: _back,
+                onSearch: widget.onSearch,
+                onPickSources: _showSourcePicker,
+                onType: (value) => setState(() => infographicType = value),
+                onStyle: (value) => setState(() => infographicStyle = value),
+                onDensity: (value) =>
+                    setState(() => infographicDensity = value),
+                onQuality: (value) =>
+                    setState(() => infographicQuality = value),
+                onGenerate: () => _generate(
+                  SourceLabView.infographicResult,
+                  _ToolKind.infographic,
+                ),
+              ),
+              SourceLabView.infographicResult => _InfographicResult(
+                loading: _isLoading,
+                result: _labResult,
+                error: _labError,
+                onBack: _back,
+                onSearch: widget.onSearch,
+                onSave: () {
+                  _saveLabResult();
+                },
+                onPng: () => _toast('Görsel önizleme ekranda açık.'),
+                onPdf: _unsupportedExport,
+                onRegenerate: () => _open(SourceLabView.infographicBuilder),
+              ),
+              SourceLabView.mindMapBuilder => _MindMapBuilder(
+                selectedSources: selectedSources,
+                mapKind: mapKind,
+                depth: mapDepth,
+                look: mapLook,
+                topics: mapTopics,
+                expandChildren: expandChildren,
+                onBack: _back,
+                onSearch: widget.onSearch,
+                onPickSources: _showSourcePicker,
+                onRemoveSource: _removeSource,
+                onMapKind: (value) => setState(() => mapKind = value),
+                onDepth: (value) => setState(() => mapDepth = value),
+                onLook: (value) => setState(() => mapLook = value),
+                onToggleTopic: (topic) {
+                  setState(() {
+                    if (mapTopics.contains(topic)) {
+                      if (mapTopics.length == 1) {
+                        return;
+                      }
+                      mapTopics.remove(topic);
+                    } else {
+                      mapTopics.add(topic);
+                    }
+                  });
+                },
+                onExpandChildren: (value) =>
+                    setState(() => expandChildren = value),
+                onGenerate: () =>
+                    _generate(SourceLabView.mindMapResult, _ToolKind.mindMap),
+              ),
+              SourceLabView.mindMapResult => _MindMapResult(
+                loading: _isLoading,
+                result: _labResult,
+                error: _labError,
+                onBack: _back,
+                onSave: () {
+                  _saveLabResult();
+                },
+                onExport: _copyLabResult,
+                onRegenerate: () => _open(SourceLabView.mindMapBuilder),
+              ),
             },
           ),
         ),
@@ -603,6 +667,8 @@ class _LabSource {
     required this.size,
     required this.detail,
     required this.tag,
+    required this.status,
+    required this.disabledReason,
   });
 
   final String id;
@@ -611,6 +677,10 @@ class _LabSource {
   final String size;
   final String detail;
   final String tag;
+  final DriveItemStatus status;
+  final String? disabledReason;
+
+  bool get isSelectable => disabledReason == null;
 }
 
 class _LabGenerationResult {
@@ -618,13 +688,29 @@ class _LabGenerationResult {
     required this.tool,
     required this.title,
     required this.sourceTitle,
+    required this.sourceCount,
+    required this.jobId,
+    required this.createdAtLabel,
+    required this.mcCostLabel,
     required this.content,
+    this.infographicType,
+    this.infographicStyle,
+    this.infographicDensity,
+    this.infographicQuality,
   });
 
   final _ToolKind tool;
   final String title;
   final String sourceTitle;
+  final int sourceCount;
+  final String jobId;
+  final String createdAtLabel;
+  final String mcCostLabel;
   final Object? content;
+  final String? infographicType;
+  final String? infographicStyle;
+  final String? infographicDensity;
+  final String? infographicQuality;
 }
 
 List<_LabSource> _sourcePool(DriveWorkspaceData data) {
@@ -638,29 +724,140 @@ List<_LabSource> _sourcePool(DriveWorkspaceData data) {
         size: file.sizeLabel,
         detail: file.pageLabel,
         tag: file.tag ?? file.courseTitle,
+        status: file.status,
+        disabledReason: _sourceDisabledReason(file),
       ),
     );
   }
   return converted;
 }
 
+String? _sourceDisabledReason(DriveFile file) {
+  if (file.status == DriveItemStatus.processing) {
+    return 'Kaynak işleniyor; hazır olunca seçilebilir.';
+  }
+  if (file.status == DriveItemStatus.uploading) {
+    return 'Yükleme devam ediyor; tamamlanınca seçilebilir.';
+  }
+  if (file.status == DriveItemStatus.failed) {
+    return 'Bu kaynak işlenemediği için seçilemez.';
+  }
+  if (file.status == DriveItemStatus.draft) {
+    return 'Taslak kaynaklar üretimde kullanılamaz.';
+  }
+  if (_isZeroSizeLabel(file.sizeLabel)) {
+    return '0 KB kaynaklar üretimde kullanılamaz.';
+  }
+  return null;
+}
+
+bool _isZeroSizeLabel(String value) {
+  final normalized = value.trim().toLowerCase();
+  return normalized.isEmpty ||
+      normalized == '-' ||
+      normalized == '0 kb' ||
+      normalized == '0 b' ||
+      normalized.startsWith('0.0 ');
+}
+
+Map<String, dynamic> _infographicPayloadOptions({
+  required String type,
+  required String style,
+  required String density,
+  required String quality,
+  required _LabSource source,
+}) {
+  final typeValue = _infographicTypeValue(type);
+  final styleValue = _infographicStyleValue(style);
+  final densityValue = _infographicDensityValue(density);
+  final qualityValue = _infographicQualityValue(quality);
+  return {
+    'infographic_type': typeValue,
+    'visual_style': styleValue,
+    'density': densityValue,
+    'quality_tier': qualityValue,
+    'imageQuality': qualityValue == 'economy' ? 'draft' : qualityValue,
+    'tier': qualityValue == 'premium' ? 'premium' : 'standard',
+    'style': styleValue,
+    'mode': typeValue == 'exam_morning' ? 'exam-morning' : 'structured',
+    'clinical':
+        styleValue == 'clinical' ||
+        typeValue == 'clinical_flow' ||
+        typeValue == 'diagnosis_treatment_algorithm',
+    'premium': qualityValue == 'premium',
+    'short': densityValue == 'short',
+    'complex': densityValue == 'detailed',
+    'source_size_tier': _sourceSizeTierFromLabel(source.size),
+  };
+}
+
+String _infographicTypeValue(String value) {
+  return switch (value) {
+    'Klinik Akış' => 'clinical_flow',
+    'Mekanizma Haritası' => 'mechanism_map',
+    'Sınav Sabahı Özeti' => 'exam_morning',
+    'Karşılaştırma Panosu' => 'comparison_board',
+    'Tanı-Tedavi Algoritması' => 'diagnosis_treatment_algorithm',
+    'Temel Bilim Mekanizması' => 'basic_science_mechanism',
+    _ => 'clinical_flow',
+  };
+}
+
+String _infographicStyleValue(String value) {
+  return switch (value) {
+    'Akademik' => 'academic',
+    'Klinik' => 'clinical',
+    'Minimal' => 'minimal',
+    'Poster' => 'poster',
+    _ => 'academic',
+  };
+}
+
+String _infographicDensityValue(String value) {
+  return switch (value) {
+    'Kısa' => 'short',
+    'Dengeli' => 'balanced',
+    'Detaylı' => 'detailed',
+    _ => 'balanced',
+  };
+}
+
+String _infographicQualityValue(String value) {
+  return switch (value) {
+    'Ekonomik' => 'economy',
+    'Premium' => 'premium',
+    _ => 'standard',
+  };
+}
+
+String _sourceSizeTierFromLabel(String value) {
+  final normalized = value.toLowerCase().replaceAll(',', '.');
+  final number =
+      double.tryParse(
+        RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(normalized)?.group(1) ?? '',
+      ) ??
+      0;
+  if (normalized.contains('kb')) return number < 300 ? 'tiny' : 'short';
+  if (normalized.contains('gb')) return 'huge';
+  if (number >= 50) return 'huge';
+  if (number >= 15) return 'large';
+  if (number >= 3) return 'medium';
+  return 'short';
+}
+
 String? _sourceLabJobType(_ToolKind tool) {
   return switch (tool) {
     _ToolKind.podcast => 'podcast',
-    _ToolKind.clinical ||
-    _ToolKind.plan ||
-    _ToolKind.infographic ||
-    _ToolKind.mindMap => null,
+    _ToolKind.infographic => 'infographic',
+    _ToolKind.clinical || _ToolKind.plan || _ToolKind.mindMap => null,
   };
 }
 
 GeneratedKind? _sourceLabGeneratedKind(_ToolKind tool) {
   return switch (tool) {
     _ToolKind.podcast => GeneratedKind.podcast,
-    _ToolKind.clinical ||
-    _ToolKind.plan ||
-    _ToolKind.infographic ||
-    _ToolKind.mindMap => null,
+    _ToolKind.infographic => GeneratedKind.infographic,
+    _ToolKind.clinical || _ToolKind.plan || _ToolKind.mindMap => null,
   };
 }
 
@@ -676,6 +873,7 @@ int _sourceLabContentCount(Object? content) {
       'questions',
       'rows',
       'bulletPoints',
+      'sections',
     ]) {
       final value = content[key];
       if (value is List) return value.length;
@@ -691,6 +889,25 @@ String _plainTextForLabResult(_LabGenerationResult result) {
     '',
     _plainTextLabValue(result.content),
   ].join('\n');
+}
+
+String _sourceLabDateTimeLabel(DateTime value) {
+  final local = value.toLocal();
+  return '${local.day.toString().padLeft(2, '0')}.'
+      '${local.month.toString().padLeft(2, '0')}.${local.year} '
+      '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
+}
+
+String _mcCostLabel(Object? data) {
+  if (data is! Map) {
+    return 'Ücret üretim sırasında güvenli şekilde hesaplanır.';
+  }
+  final value = data['final_mc_cost'] ?? data['reserved_mc'];
+  if (value is num && value > 0) {
+    return '${value.toStringAsFixed(value % 1 == 0 ? 0 : 2)} MC rezerve edildi';
+  }
+  return 'Ücret üretim sırasında güvenli şekilde hesaplanır.';
 }
 
 String _plainTextLabValue(Object? value) {
@@ -709,10 +926,12 @@ String _plainTextLabValue(Object? value) {
   }
   if (value is Map) {
     if (value.isEmpty) return 'Sonuç içeriği boş.';
-    return value.entries.map((entry) {
-      final key = entry.key.toString();
-      return '$key: ${_plainTextLabValue(entry.value)}';
-    }).join('\n');
+    return value.entries
+        .map((entry) {
+          final key = entry.key.toString();
+          return '$key: ${_plainTextLabValue(entry.value)}';
+        })
+        .join('\n');
   }
   final text = value.toString().trim();
   return text.isEmpty ? 'Sonuç içeriği boş.' : text;
@@ -733,9 +952,29 @@ String _friendlyLabError(Object error) {
       .toString()
       .replaceFirst('Bad state: ', '')
       .replaceFirst('Exception: ', '')
+      .replaceFirst('FunctionException', '')
       .trim();
   if (text.contains('SourceBase Supabase client is not configured')) {
     return 'Oturum bağlantısı hazır değil. Lütfen tekrar giriş yapın.';
+  }
+  if (text.contains('IMAGE_PROVIDER_NOT_CONFIGURED')) {
+    return 'İnfografik üretimi şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
+  }
+  if (text.contains('JOB_CREATE_FAILED')) {
+    return 'İnfografik üretim işi şu anda başlatılamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
+  }
+  if (text.contains('VERTEX_AUTH_FAILED') ||
+      text.contains('VERTEX_NOT_CONFIGURED') ||
+      text.contains('IMAGE_AUTH_FAILED')) {
+    return 'AI üretim sağlayıcısı şu anda doğrulanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
+  }
+  if (text.contains('INSUFFICIENT_MC')) {
+    return 'Bu üretim için MedasiCoin bakiyen yetersiz. Bakiyeni artırıp tekrar deneyebilirsin.';
+  }
+  if (text.contains('IMAGE_UPSTREAM_ERROR') ||
+      text.contains('IMAGE_GENERATION_FAILED') ||
+      text.contains('IMAGE_EMPTY')) {
+    return 'İnfografik görseli şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
   }
   return text.isEmpty
       ? 'AI üretimi tamamlanamadı. Lütfen tekrar deneyin.'
@@ -859,7 +1098,8 @@ class _SourceLabHome extends StatelessWidget {
               ? const _LabEmptyState(
                   icon: Icons.folder_open_outlined,
                   title: 'Kaynak seçilmedi',
-                  message: 'SourceLab araçlarını kullanmak için Drive’dan en az bir kaynak seçin.',
+                  message:
+                      'SourceLab araçlarını kullanmak için Drive’dan en az bir kaynak seçin.',
                 )
               : Column(
                   children: [
@@ -1154,8 +1394,7 @@ class _SmartSuggestionsPanel extends StatelessWidget {
           _SuggestionRow(
             icon: Icons.keyboard_voice_outlined,
             color: AppColors.blue,
-            text:
-                'Ders notlarını podcast formatında dinleyebilirsin.',
+            text: 'Ders notlarını podcast formatında dinleyebilirsin.',
             onTap: () => onOpenTool(_ToolKind.podcast),
           ),
         ],
@@ -2107,7 +2346,8 @@ class _PodcastResult extends StatelessWidget {
         onSave: onSave,
         onExport: onExport,
         onRegenerate: onRegenerate,
-        audioNotice: 'Backend metinsel podcast scripti döndürüyor; gerçek ses dosyası/oynatıcı entegrasyonu bağlı değil.',
+        audioNotice:
+            'Backend metinsel podcast scripti döndürüyor; gerçek ses dosyası/oynatıcı entegrasyonu bağlı değil.',
       );
     }
     return _LabScroll(
@@ -2210,155 +2450,345 @@ class _PodcastResult extends StatelessWidget {
   }
 }
 
+class _InfographicHero extends StatelessWidget {
+  const _InfographicHero({
+    required this.selectedCount,
+    required this.hasSources,
+    required this.onPickSources,
+  });
+
+  final int selectedCount;
+  final bool hasSources;
+  final VoidCallback onPickSources;
+
+  @override
+  Widget build(BuildContext context) {
+    return _LabPanel(
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+      radius: 18,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 620;
+          final copy = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'İnfografik',
+                style: TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 34,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Kaynağından klinik akış, mekanizma ve sınav odaklı görsel özet üret.',
+                style: TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 16,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _MiniHeroChip(
+                    icon: Icons.source_outlined,
+                    label: '$selectedCount kaynak seçili',
+                  ),
+                  const _MiniHeroChip(
+                    icon: Icons.medical_information_outlined,
+                    label: 'Klinik odak',
+                  ),
+                  const _MiniHeroChip(
+                    icon: Icons.high_quality_outlined,
+                    label: 'Görsel çıktı',
+                  ),
+                ],
+              ),
+            ],
+          );
+          final cta = _SmallActionButton(
+            label: hasSources ? 'Kaynakları yönet' : 'Drive’dan kaynak seç',
+            icon: Icons.folder_open_rounded,
+            onTap: onPickSources,
+          );
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                copy,
+                const SizedBox(height: 16),
+                Align(alignment: Alignment.centerLeft, child: cta),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: copy),
+              const SizedBox(width: 20),
+              SizedBox(width: 210, child: cta),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _InfographicOptionGrid extends StatelessWidget {
+  const _InfographicOptionGrid({
+    required this.values,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<String> values;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth > 680 ? 3 : 2;
+        const gap = 10.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final value in values)
+              SizedBox(
+                width: width,
+                child: _InfographicOptionCard(
+                  label: value,
+                  selected: value == selected,
+                  onTap: () => onSelected(value),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _InfographicOptionCard extends StatelessWidget {
+  const _InfographicOptionCard({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        height: 76,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFEAF5FF) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: selected ? AppColors.blue : AppColors.line),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: selected ? AppColors.blue : AppColors.softText,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 14.5,
+                  height: 1.12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _InfographicBuilder extends StatelessWidget {
   const _InfographicBuilder({
     required this.selectedSources,
+    required this.type,
     required this.style,
-    required this.size,
     required this.density,
-    required this.accent,
-    required this.showSources,
+    required this.quality,
     required this.onBack,
     required this.onSearch,
     required this.onPickSources,
+    required this.onType,
     required this.onStyle,
-    required this.onSize,
     required this.onDensity,
-    required this.onAccent,
-    required this.onShowSources,
+    required this.onQuality,
     required this.onGenerate,
   });
 
   final List<_LabSource> selectedSources;
+  final String type;
   final String style;
-  final String size;
   final String density;
-  final Color accent;
-  final bool showSources;
+  final String quality;
   final VoidCallback onBack;
   final VoidCallback onSearch;
   final VoidCallback onPickSources;
+  final ValueChanged<String> onType;
   final ValueChanged<String> onStyle;
-  final ValueChanged<String> onSize;
   final ValueChanged<String> onDensity;
-  final ValueChanged<Color> onAccent;
-  final ValueChanged<bool> onShowSources;
+  final ValueChanged<String> onQuality;
   final VoidCallback onGenerate;
 
   @override
   Widget build(BuildContext context) {
+    final hasSources = selectedSources.isNotEmpty;
+    final blockedReasons = selectedSources
+        .where((source) => source.disabledReason != null)
+        .map((source) => source.disabledReason!)
+        .toSet()
+        .toList();
+    final canGenerate = hasSources && blockedReasons.isEmpty;
     return _LabScroll(
       children: [
         _LabTopBar(onBack: onBack, onSearch: onSearch),
-        _LabHero(
-          title: 'İnfografik',
-          subtitle:
-              'Kaynaklarını anlaşılır, görsel ve\npaylaşılabilir bilgi kartlarına dönüştür.',
-          art: _HeroArtKind.infographic,
+        _InfographicHero(
+          selectedCount: selectedSources.length,
+          hasSources: hasSources,
+          onPickSources: onPickSources,
         ),
         _StepPanel(
           number: 1,
-          title: 'Seçili Kaynaklar',
+          title: 'Kaynak Seçimi',
           trailing: _SmallActionButton(
-            label: 'Kaynak Ekle',
-            icon: Icons.add_rounded,
+            label: hasSources ? 'Kaynak Değiştir' : 'Drive’dan Seç',
+            icon: Icons.folder_open_rounded,
             onTap: onPickSources,
           ),
-          child: _SourceGrid(
-            sources: selectedSources,
-            allowRemove: false,
-            onRemove: (_) {},
-            onMenu: onPickSources,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!hasSources)
+                const _LabEmptyState(
+                  icon: Icons.folder_open_outlined,
+                  title: 'Kaynak seçilmedi',
+                  message:
+                      'Hazır ve boyutu 0 KB olmayan bir Drive kaynağı seçerek infografik üretimini başlatın.',
+                )
+              else
+                _SourceGrid(
+                  sources: selectedSources,
+                  allowRemove: false,
+                  onRemove: (_) {},
+                  onMenu: onPickSources,
+                ),
+              for (final reason in blockedReasons) ...[
+                const SizedBox(height: 12),
+                _LabNotice(text: reason),
+              ],
+            ],
           ),
         ),
         _StepPanel(
           number: 2,
-          title: 'İnfografik Ayarları',
+          title: 'İnfografik Türü',
+          child: _InfographicOptionGrid(
+            values: const [
+              'Klinik Akış',
+              'Mekanizma Haritası',
+              'Sınav Sabahı Özeti',
+              'Karşılaştırma Panosu',
+              'Tanı-Tedavi Algoritması',
+              'Temel Bilim Mekanizması',
+            ],
+            selected: type,
+            onSelected: onType,
+          ),
+        ),
+        _StepPanel(
+          number: 3,
+          title: 'Görsel Stil ve Yoğunluk',
           child: Column(
             children: [
               _SettingRow(
                 icon: Icons.palette_outlined,
-                label: 'Stil',
+                label: 'Görsel Stil',
                 child: _SegmentedOptions(
-                  values: const ['Temiz', 'Akademik', 'Sosyal Medya'],
+                  values: const ['Akademik', 'Klinik', 'Minimal', 'Poster'],
                   selected: style,
                   onSelected: onStyle,
                 ),
               ),
               _SettingRow(
-                icon: Icons.crop_rounded,
-                label: 'Boyut',
-                child: _SegmentedOptions(
-                  values: const ['Dikey', 'Kare', 'Yatay'],
-                  selected: size,
-                  onSelected: onSize,
-                ),
-              ),
-              _SettingRow(
                 icon: Icons.notes_rounded,
-                label: 'İçerik Yoğunluğu',
+                label: 'Yoğunluk',
                 child: _SegmentedOptions(
-                  values: const ['Az', 'Orta', 'Yoğun'],
+                  values: const ['Kısa', 'Dengeli', 'Detaylı'],
                   selected: density,
                   onSelected: onDensity,
                 ),
-              ),
-              _SettingRow(
-                icon: Icons.water_drop_outlined,
-                label: 'Vurgu Rengi',
-                child: _ColorDots(selected: accent, onSelected: onAccent),
-              ),
-              _SwitchSetting(
-                icon: Icons.format_quote_rounded,
-                title: 'Kaynak Göster',
-                value: showSources,
-                onChanged: onShowSources,
-              ),
-            ],
-          ),
-        ),
-        _StepPanel(
-          number: 3,
-          title: 'İnfografik Bölümleri',
-          child: Column(
-            children: [
-              _FocusChips(
-                labels: const [
-                  'Tanım',
-                  'Klinik Bulgular',
-                  'Ayırıcı Tanı',
-                  'Tedavi',
-                  'Komplikasyonlar',
-                ],
-                selectedLabels: const {
-                  'Tanım',
-                  'Klinik Bulgular',
-                  'Ayırıcı Tanı',
-                  'Tedavi',
-                  'Komplikasyonlar',
-                },
-                onTap: (label) =>
-                    _showLabSnack(context, '$label odağı güncellendi.'),
-              ),
-              const SizedBox(height: 14),
-              _SmallActionButton(
-                label: 'Bölüm Ekle',
-                icon: Icons.add_rounded,
-                onTap: () =>
-                    _showLabSnack(context, 'Yeni infografik bölümü eklendi.'),
               ),
             ],
           ),
         ),
         _StepPanel(
           number: 4,
-          title: 'Önizleme Yerleşimi',
+          title: 'Kalite ve MC',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SettingRow(
+                icon: Icons.high_quality_outlined,
+                label: 'Kalite',
+                child: _SegmentedOptions(
+                  values: const ['Ekonomik', 'Standart', 'Premium'],
+                  selected: quality,
+                  onSelected: onQuality,
+                ),
+              ),
+              _LabNotice(
+                text: quality == 'Premium'
+                    ? 'Premium kalite daha yüksek görsel kalite hedefler ve standart üretime göre daha fazla MC tüketebilir. Kesin ücret backend tarafından üretim sırasında hesaplanır.'
+                    : 'Ücret üretim sırasında güvenli şekilde backend tarafından hesaplanır.',
+              ),
+            ],
+          ),
+        ),
+        _StepPanel(
+          number: 5,
+          title: 'Akademik Görsel Çatı',
           child: const _InfographicLayoutPreview(),
         ),
         _PrimaryLabButton(
-          label: 'İnfografiği Oluştur',
+          label: 'İnfografik üret',
           icon: Icons.auto_awesome_rounded,
-          onTap: onGenerate,
+          onTap: canGenerate ? onGenerate : null,
+          subtitle: canGenerate
+              ? null
+              : hasSources
+              ? 'Hazır olmayan kaynak var'
+              : 'Önce kaynak seç',
           height: 72,
         ),
       ],
@@ -2392,14 +2822,14 @@ class _InfographicResult extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading || result != null || error != null) {
-      return _SourceLabGeneratedResult(
-        title: 'İnfografik',
+      return _InfographicGeneratedResult(
         loading: loading,
         result: result,
         error: error,
         onBack: onBack,
         onSave: onSave,
-        onExport: onPdf,
+        onView: onPng,
+        onShare: onPdf,
         onRegenerate: onRegenerate,
       );
     }
@@ -2701,6 +3131,345 @@ class _MindMapResult extends StatelessWidget {
   }
 }
 
+class _InfographicGeneratedResult extends StatelessWidget {
+  const _InfographicGeneratedResult({
+    required this.loading,
+    required this.result,
+    required this.error,
+    required this.onBack,
+    required this.onSave,
+    required this.onView,
+    required this.onShare,
+    required this.onRegenerate,
+  });
+
+  final bool loading;
+  final _LabGenerationResult? result;
+  final String? error;
+  final VoidCallback onBack;
+  final VoidCallback onSave;
+  final VoidCallback onView;
+  final VoidCallback onShare;
+  final VoidCallback onRegenerate;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = result;
+    final image = value == null
+        ? null
+        : _infographicImageFromContent(value.content);
+    return _LabScroll(
+      children: [
+        _MinimalTopBar(
+          title: 'İnfografik',
+          subtitle: loading
+              ? 'Görsel üretim kuyruğu işleniyor.'
+              : value == null
+              ? 'İnfografik üretimi tamamlanamadı.'
+              : '${value.sourceTitle} kaynağından klinik görsel özet.',
+          onBack: onBack,
+        ),
+        _LabPanel(
+          child: loading
+              ? const _InfographicLoadingState()
+              : error != null
+              ? _LabEmptyState(
+                  icon: Icons.error_outline_rounded,
+                  title: 'İnfografik üretimi tamamlanamadı',
+                  message: error!,
+                )
+              : value == null
+              ? const _LabEmptyState(
+                  icon: Icons.warning_amber_rounded,
+                  title: 'Boş sonuç',
+                  message:
+                      'Backend tamamlandı ancak gösterilecek görsel dönmedi.',
+                )
+              : _InfographicResultBody(result: value, image: image),
+        ),
+        if (value != null && error == null && !loading)
+          _ResponsiveActions(
+            children: [
+              _SecondaryLabButton(
+                label: 'Görüntüle',
+                icon: Icons.open_in_full_rounded,
+                onTap: onView,
+              ),
+              _SecondaryLabButton(
+                label: 'Kaydet',
+                icon: Icons.bookmark_border_rounded,
+                onTap: onSave,
+              ),
+              _SecondaryLabButton(
+                label: 'Yeniden üret',
+                icon: Icons.refresh_rounded,
+                onTap: onRegenerate,
+              ),
+              _SecondaryLabButton(
+                label: 'İndir / paylaş',
+                icon: Icons.ios_share_rounded,
+                onTap: onShare,
+              ),
+            ],
+          )
+        else if (!loading)
+          _PrimaryLabButton(
+            label: 'Yeniden üret',
+            icon: Icons.refresh_rounded,
+            onTap: onRegenerate,
+          ),
+      ],
+    );
+  }
+}
+
+class _InfographicLoadingState extends StatelessWidget {
+  const _InfographicLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    const stages = [
+      'Kaynak analiz ediliyor',
+      'Görsel yapı kuruluyor',
+      'İnfografik oluşturuluyor',
+      'Sonuç hazırlanıyor',
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Column(
+        children: [
+          const CircularProgressIndicator(color: AppColors.blue),
+          const SizedBox(height: 18),
+          for (var i = 0; i < stages.length; i++)
+            Padding(
+              padding: EdgeInsets.only(bottom: i == stages.length - 1 ? 0 : 10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 13,
+                    backgroundColor: i == 0
+                        ? AppColors.selectedBlue
+                        : const Color(0xFFF3F6FB),
+                    child: Icon(
+                      i == 0 ? Icons.sync_rounded : Icons.more_horiz_rounded,
+                      size: 16,
+                      color: i == 0 ? AppColors.blue : AppColors.muted,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    stages[i],
+                    style: TextStyle(
+                      color: i == 0 ? AppColors.navy : AppColors.muted,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfographicResultBody extends StatelessWidget {
+  const _InfographicResultBody({required this.result, required this.image});
+
+  final _LabGenerationResult result;
+  final _InfographicImage? image;
+
+  @override
+  Widget build(BuildContext context) {
+    final contentTitle = _infographicTitle(result.content);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          contentTitle.isEmpty ? result.title : contentTitle,
+          style: const TextStyle(
+            color: AppColors.navy,
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 14),
+        _InfographicMetaGrid(result: result, image: image),
+        const SizedBox(height: 18),
+        AspectRatio(
+          aspectRatio: 2 / 3,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FBFF),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: image == null
+                  ? const _LabEmptyState(
+                      icon: Icons.image_not_supported_outlined,
+                      title: 'Görsel çıktı bulunamadı',
+                      message:
+                          'İş tamamlandı ancak backend image URL veya data URL döndürmedi.',
+                    )
+                  : _InfographicImageView(image: image!),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InfographicMetaGrid extends StatelessWidget {
+  const _InfographicMetaGrid({required this.result, required this.image});
+
+  final _LabGenerationResult result;
+  final _InfographicImage? image;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      ('Kaynak', result.sourceTitle),
+      ('Oluşturma', result.createdAtLabel),
+      (
+        'Stil / kalite',
+        '${result.infographicStyle ?? '-'} / ${result.infographicQuality ?? '-'}',
+      ),
+      (
+        'Tür / yoğunluk',
+        '${result.infographicType ?? '-'} / ${result.infographicDensity ?? '-'}',
+      ),
+      ('Kaynak sayısı', '${result.sourceCount}'),
+      ('MC', result.mcCostLabel),
+      ('Image', image == null ? 'Yok' : image!.label),
+    ];
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final item in items)
+          Container(
+            width: MediaQuery.sizeOf(context).width < 520
+                ? double.infinity
+                : 190,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FBFF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.$1,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.$2,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13,
+                    height: 1.18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _InfographicImageView extends StatelessWidget {
+  const _InfographicImageView({required this.image});
+
+  final _InfographicImage image;
+
+  @override
+  Widget build(BuildContext context) {
+    if (image.bytes != null) {
+      return Image.memory(image.bytes!, fit: BoxFit.contain);
+    }
+    return Image.network(
+      image.url!,
+      fit: BoxFit.contain,
+      errorBuilder: (context, _, _) => const _LabEmptyState(
+        icon: Icons.broken_image_outlined,
+        title: 'Görsel yüklenemedi',
+        message: 'Image URL alındı ancak görsel render edilemedi.',
+      ),
+    );
+  }
+}
+
+class _InfographicImage {
+  const _InfographicImage({this.url, this.bytes, required this.label});
+
+  final String? url;
+  final Uint8List? bytes;
+  final String label;
+}
+
+_InfographicImage? _infographicImageFromContent(Object? content) {
+  if (content is! Map) return null;
+  final image = content['image'];
+  final imageMap = image is Map ? image : const {};
+  final dataUrl = _firstText([
+    imageMap['dataUrl'],
+    imageMap['data_url'],
+    content['dataUrl'],
+    content['data_url'],
+  ]);
+  if (dataUrl.startsWith('data:image')) {
+    final comma = dataUrl.indexOf(',');
+    if (comma > 0) {
+      try {
+        final bytes = base64Decode(dataUrl.substring(comma + 1));
+        return _InfographicImage(bytes: bytes, label: 'dataUrl');
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+  final url = _firstText([
+    imageMap['storageUrl'],
+    imageMap['storage_url'],
+    imageMap['url'],
+    content['storageUrl'],
+    content['storage_url'],
+    content['imageUrl'],
+    content['image_url'],
+    content['url'],
+  ]);
+  if (url.startsWith('http')) {
+    return _InfographicImage(url: url, label: 'URL');
+  }
+  return null;
+}
+
+String _infographicTitle(Object? content) {
+  if (content is! Map) return '';
+  return content['title']?.toString().trim() ?? '';
+}
+
+String _firstText(List<Object?> values) {
+  for (final value in values) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isNotEmpty) return text;
+  }
+  return '';
+}
+
 class _SourceLabGeneratedResult extends StatelessWidget {
   const _SourceLabGeneratedResult({
     required this.title,
@@ -2733,35 +3502,36 @@ class _SourceLabGeneratedResult extends StatelessWidget {
           subtitle: loading
               ? 'Üretim kuyruğu işleniyor.'
               : result == null
-                  ? 'Üretim tamamlanamadı.'
-                  : '${result!.sourceTitle} kaynağından oluşturuldu.',
+              ? 'Üretim tamamlanamadı.'
+              : '${result!.sourceTitle} kaynağından oluşturuldu.',
           onBack: onBack,
         ),
         _LabPanel(
           child: loading
               ? const _LabLoadingState()
               : error != null
-                  ? _LabEmptyState(
-                      icon: Icons.error_outline_rounded,
-                      title: 'Üretim başlatılamadı',
-                      message: error!,
-                    )
-                  : result == null
-                      ? const _LabEmptyState(
-                          icon: Icons.warning_amber_rounded,
-                          title: 'Boş sonuç',
-                          message: 'Backend tamamlandı ancak gösterilecek içerik dönmedi.',
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (audioNotice != null) ...[
-                              _LabNotice(text: audioNotice!),
-                              const SizedBox(height: 14),
-                            ],
-                            _LabGeneratedContent(content: result!.content),
-                          ],
-                        ),
+              ? _LabEmptyState(
+                  icon: Icons.error_outline_rounded,
+                  title: 'Üretim başlatılamadı',
+                  message: error!,
+                )
+              : result == null
+              ? const _LabEmptyState(
+                  icon: Icons.warning_amber_rounded,
+                  title: 'Boş sonuç',
+                  message:
+                      'Backend tamamlandı ancak gösterilecek içerik dönmedi.',
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (audioNotice != null) ...[
+                      _LabNotice(text: audioNotice!),
+                      const SizedBox(height: 14),
+                    ],
+                    _LabGeneratedContent(content: result!.content),
+                  ],
+                ),
         ),
         if (result != null && error == null && !loading)
           _ResponsiveActions(
@@ -2896,7 +3666,10 @@ class _LabGeneratedContent extends StatelessWidget {
               _LabGeneratedItem(index: i + 1, value: list[i])
           else
             for (final entry in value.entries)
-              _LabGeneratedPair(label: entry.key.toString(), value: entry.value),
+              _LabGeneratedPair(
+                label: entry.key.toString(),
+                value: entry.value,
+              ),
         ],
       );
     }
@@ -2905,7 +3678,17 @@ class _LabGeneratedContent extends StatelessWidget {
 }
 
 List<Object?>? _labPreferredList(Map<dynamic, dynamic> content) {
-  for (final key in const ['segments', 'chapters', 'steps', 'days', 'nodes', 'questions', 'rows', 'bulletPoints']) {
+  for (final key in const [
+    'segments',
+    'chapters',
+    'steps',
+    'days',
+    'nodes',
+    'questions',
+    'rows',
+    'bulletPoints',
+    'sections',
+  ]) {
     final value = content[key];
     if (value is List) return value.cast<Object?>();
   }
@@ -3684,12 +4467,15 @@ class _SourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = !source.isSelectable;
     return Container(
-      height: 104,
+      constraints: const BoxConstraints(minHeight: 104),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppColors.line),
+        color: disabled ? const Color(0xFFF4F7FB) : Colors.white,
+        border: Border.all(
+          color: disabled ? AppColors.softLine : AppColors.line,
+        ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -3722,6 +4508,19 @@ class _SourceCard extends StatelessWidget {
                     fontSize: 12.5,
                   ),
                 ),
+                if (disabled) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    source.disabledReason!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.red,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -3948,15 +4747,26 @@ class _SourcePickerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = !source.isSelectable;
     return InkWell(
-      onTap: onTap,
+      onTap: disabled ? null : onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: selected ? AppColors.selectedBlue : Colors.white,
+          color: disabled
+              ? const Color(0xFFF4F7FB)
+              : selected
+              ? AppColors.selectedBlue
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: selected ? AppColors.blue : AppColors.line),
+          border: Border.all(
+            color: disabled
+                ? AppColors.softLine
+                : selected
+                ? AppColors.blue
+                : AppColors.line,
+          ),
         ),
         child: Row(
           children: [
@@ -3982,12 +4792,31 @@ class _SourcePickerRow extends StatelessWidget {
                       fontSize: 13,
                     ),
                   ),
+                  if (disabled) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      source.disabledReason!,
+                      style: const TextStyle(
+                        color: AppColors.red,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
             Icon(
-              selected ? Icons.check_circle_rounded : Icons.circle_outlined,
-              color: selected ? AppColors.blue : AppColors.softText,
+              disabled
+                  ? Icons.block_rounded
+                  : selected
+                  ? Icons.check_circle_rounded
+                  : Icons.circle_outlined,
+              color: disabled
+                  ? AppColors.muted
+                  : selected
+                  ? AppColors.blue
+                  : AppColors.softText,
             ),
           ],
         ),
@@ -4523,21 +5352,28 @@ class _PrimaryLabButton extends StatelessWidget {
   final String label;
   final String? subtitle;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final double height;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return SizedBox(
       width: double.infinity,
       height: height,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
+          gradient: enabled
+              ? AppColors.primaryGradient
+              : const LinearGradient(
+                  colors: [Color(0xFFCAD4E4), Color(0xFFB8C4D6)],
+                ),
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: AppColors.blue.withValues(alpha: .23),
+              color: (enabled ? AppColors.blue : AppColors.muted).withValues(
+                alpha: .18,
+              ),
               blurRadius: 18,
               offset: const Offset(0, 9),
             ),
@@ -5584,64 +6420,6 @@ class _InfoPill extends StatelessWidget {
   }
 }
 
-class _ColorDots extends StatelessWidget {
-  const _ColorDots({required this.selected, required this.onSelected});
-
-  final Color selected;
-  final ValueChanged<Color> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    const colors = [
-      AppColors.blue,
-      AppColors.cyan,
-      AppColors.purple,
-      Color(0xFFFF3F7D),
-      AppColors.orange,
-      AppColors.green,
-      Color(0xFF8492AE),
-    ];
-    return Row(
-      children: [
-        for (final color in colors)
-          Padding(
-            padding: const EdgeInsets.only(right: 18),
-            child: InkWell(
-              onTap: () => onSelected(color),
-              customBorder: const CircleBorder(),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected == color ? AppColors.blue : Colors.white,
-                    width: selected == color ? 4 : 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: .18),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: selected == color
-                    ? const Icon(
-                        Icons.check_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      )
-                    : null,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 class _PatientAvatar extends StatelessWidget {
   const _PatientAvatar();
 
@@ -6372,10 +7150,10 @@ class _PlanPreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lines = const [
-        'İçerik hazırlanıyor',
-        'İçerik hazırlanıyor',
-        'İçerik hazırlanıyor',
-      ];
+      'İçerik hazırlanıyor',
+      'İçerik hazırlanıyor',
+      'İçerik hazırlanıyor',
+    ];
     return Container(
       height: 170,
       padding: const EdgeInsets.all(16),
@@ -6742,24 +7520,9 @@ class _PlanTimelinePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      (
-        '1',
-        'Bölüm 1',
-        'İçerik hazırlanıyor',
-        '—',
-      ),
-      (
-        '2',
-        'Bölüm 2',
-        'İçerik hazırlanıyor',
-        '—',
-      ),
-      (
-        '3',
-        'Bölüm 3',
-        'İçerik hazırlanıyor',
-        '—',
-      ),
+      ('1', 'Bölüm 1', 'İçerik hazırlanıyor', '—'),
+      ('2', 'Bölüm 2', 'İçerik hazırlanıyor', '—'),
+      ('3', 'Bölüm 3', 'İçerik hazırlanıyor', '—'),
     ];
     return _LabPanel(
       padding: EdgeInsets.zero,
@@ -6900,10 +7663,7 @@ class _TodayGoalCard extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  TextSpan(
-                    text:
-                        'Konu Başlığı\nBu bölüm henüz hazır değil.',
-                  ),
+                  TextSpan(text: 'Konu Başlığı\nBu bölüm henüz hazır değil.'),
                 ],
               ),
               style: TextStyle(
@@ -7081,9 +7841,21 @@ class _LegendList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: const [
-        _LegendRow(label: 'Kategori 1', value: 'İçerik hazırlanıyor', color: AppColors.blue),
-        _LegendRow(label: 'Kategori 2', value: 'İçerik hazırlanıyor', color: AppColors.green),
-        _LegendRow(label: 'Kategori 3', value: 'İçerik hazırlanıyor', color: AppColors.purple),
+        _LegendRow(
+          label: 'Kategori 1',
+          value: 'İçerik hazırlanıyor',
+          color: AppColors.blue,
+        ),
+        _LegendRow(
+          label: 'Kategori 2',
+          value: 'İçerik hazırlanıyor',
+          color: AppColors.green,
+        ),
+        _LegendRow(
+          label: 'Kategori 3',
+          value: 'İçerik hazırlanıyor',
+          color: AppColors.purple,
+        ),
       ],
     );
   }
@@ -7683,13 +8455,11 @@ class _PodcastNotesPanel extends StatelessWidget {
             icon: Icons.notes_rounded,
             title: 'Notlar',
             action: 'Kritik Noktalar',
-            onAction: () => _showLabSnack(context, 'Bu bölüm henüz hazır değil.'),
+            onAction: () =>
+                _showLabSnack(context, 'Bu bölüm henüz hazır değil.'),
           ),
           for (final note in const [
-            (
-              'Not başlığı yükleniyor...',
-              'İçerik açıklaması hazırlanıyor.',
-            ),
+            ('Not başlığı yükleniyor...', 'İçerik açıklaması hazırlanıyor.'),
           ])
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
@@ -7878,7 +8648,10 @@ class _HeartCoverCard extends StatelessWidget {
           Text(
             'KONU\nBAŞLIĞI',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.muted, fontWeight: FontWeight.w900),
+            style: TextStyle(
+              color: AppColors.muted,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),

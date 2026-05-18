@@ -12,6 +12,7 @@ enum GeneratedKind {
   comparison,
   podcast,
   table,
+  infographic,
   mindMap,
 }
 
@@ -294,9 +295,7 @@ class GcsUploadSession {
     }
     return GcsUploadSession(
       uploadUrl:
-          json['uploadUrl']?.toString() ??
-          json['upload_url']?.toString() ??
-          '',
+          json['uploadUrl']?.toString() ?? json['upload_url']?.toString() ?? '',
       objectName:
           json['objectName']?.toString() ??
           json['object_name']?.toString() ??

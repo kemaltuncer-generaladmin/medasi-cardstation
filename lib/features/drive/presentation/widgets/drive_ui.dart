@@ -1013,6 +1013,7 @@ IconData generatedIcon(GeneratedKind kind) {
     GeneratedKind.comparison => Icons.balance_rounded,
     GeneratedKind.podcast => Icons.keyboard_voice_outlined,
     GeneratedKind.table => Icons.table_chart_outlined,
+    GeneratedKind.infographic => Icons.insert_chart_outlined_rounded,
     GeneratedKind.mindMap => Icons.hub_outlined,
   };
 }
@@ -1026,6 +1027,7 @@ Color generatedColor(GeneratedKind kind) {
     GeneratedKind.comparison => AppColors.blue,
     GeneratedKind.podcast => const Color(0xFFFF3F96),
     GeneratedKind.table => const Color(0xFF13B857),
+    GeneratedKind.infographic => AppColors.cyan,
     GeneratedKind.mindMap => AppColors.purple,
   };
 }

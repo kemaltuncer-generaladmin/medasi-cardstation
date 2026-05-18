@@ -1,6 +1,20 @@
 import '../../auth/data/sourcebase_auth_backend.dart';
 import 'drive_models.dart';
 
+class SourceBaseApiException implements Exception {
+  const SourceBaseApiException(this.message, {this.code, this.status});
+
+  final String message;
+  final String? code;
+  final int? status;
+
+  @override
+  String toString() {
+    final prefix = code == null || code!.isEmpty ? '' : '$code: ';
+    return '$prefix$message';
+  }
+}
+
 class SourceBaseDriveApi {
   const SourceBaseDriveApi();
 
@@ -24,10 +38,14 @@ class SourceBaseDriveApi {
       final body = Map<String, dynamic>.from(data);
       if (body['ok'] == false) {
         final error = body['error'];
-        throw StateError(
+        throw SourceBaseApiException(
           error is Map
               ? error['message']?.toString() ?? 'SourceBase request failed.'
               : 'SourceBase request failed.',
+          code: error is Map ? error['code']?.toString() : null,
+          status: error is Map
+              ? int.tryParse(error['status']?.toString() ?? '')
+              : null,
         );
       }
       return body;
@@ -123,11 +141,15 @@ class SourceBaseDriveApi {
   Future<Map<String, dynamic>> createGenerationJob({
     required String fileId,
     required String jobType,
+    List<String>? sourceIds,
     int? count,
     String? qualityTier,
     Map<String, dynamic>? options,
   }) {
     final payload = <String, dynamic>{'fileId': fileId, 'jobType': jobType};
+    if (sourceIds != null && sourceIds.isNotEmpty) {
+      payload['sourceIds'] = sourceIds;
+    }
     if (count != null) payload['count'] = count;
     if (qualityTier != null && qualityTier.trim().isNotEmpty) {
       payload['quality_tier'] = qualityTier.trim();

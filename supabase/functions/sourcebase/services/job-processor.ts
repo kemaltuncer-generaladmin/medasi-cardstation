@@ -8,9 +8,11 @@
 import {
   GenerationJob,
   GenerationType,
+  isRecord,
   JobStatus,
   SafeError,
 } from "../types.ts";
+import { storeGeneratedImageFromDataUrl } from "./generated-image-storage.ts";
 import { generateInfographicImage } from "./image-provider.ts";
 import { captureMedasiCoin, refundMedasiCoin } from "./medasicoin-wallet.ts";
 import type { McPricingQuote } from "./medasicoin-pricing.ts";
@@ -217,6 +219,10 @@ type JobGenerationOptions = {
   maxTokens?: number;
   routeOptions?: RouteOptions;
   pricing?: McPricingQuote;
+  infographicType?: string;
+  visualStyle?: string;
+  density?: string;
+  qualityTier?: string;
 };
 
 type RoutedGenerationResult<T> = GenerationResult<T> & {
@@ -270,6 +276,12 @@ export class JobProcessor {
           sourceTextLength: input.sourceText.length,
           modelRoute: safeRouteMetadata(route),
           pricing: input.options?.pricing,
+          generationOptions: {
+            infographicType: input.options?.infographicType,
+            visualStyle: input.options?.visualStyle,
+            density: input.options?.density,
+            qualityTier: input.options?.qualityTier,
+          },
         },
       },
     );
@@ -300,6 +312,9 @@ export class JobProcessor {
         input.sourceText,
         input.options ?? {},
       );
+      const content = input.jobType === "infographic"
+        ? await this.attachInfographicStorage(job, result.content)
+        : result.content;
       await updateJob(
         this.config.supabaseUrl,
         this.config.serviceRoleKey,
@@ -312,7 +327,7 @@ export class JobProcessor {
           model: result.modelRoute.model,
           metadata: {
             ...job.metadata,
-            content: result.content,
+            content,
             modelRoute: result.modelRoute,
             completedAt: new Date().toISOString(),
           },
@@ -334,11 +349,12 @@ export class JobProcessor {
         model: result.modelRoute.model,
         metadata: {
           ...job.metadata,
-          content: result.content,
+          content,
           modelRoute: result.modelRoute,
         },
       };
     } catch (error) {
+      const errorCode = error instanceof SafeError ? error.code : "AI_FAILED";
       const pricing = isPricingQuote(job.metadata?.pricing)
         ? job.metadata.pricing
         : undefined;
@@ -349,7 +365,7 @@ export class JobProcessor {
         amountUnits: pricing?.amount_units ?? 0,
         reason: `ai_generation_refund:${input.jobType}`,
         metadata: {
-          errorCode: error instanceof SafeError ? error.code : "AI_FAILED",
+          errorCode,
         },
       });
       await updateJob(
@@ -361,6 +377,11 @@ export class JobProcessor {
           error_message: error instanceof SafeError
             ? error.message
             : "AI üretimi tamamlanamadı.",
+          metadata: {
+            ...job.metadata,
+            errorCode,
+            failedAt: new Date().toISOString(),
+          },
         },
       );
       throw error;
@@ -437,6 +458,10 @@ export class JobProcessor {
       maxTokens: options.maxTokens,
       provider: route.provider,
       model: route.model,
+      infographicType: options.infographicType,
+      visualStyle: options.visualStyle,
+      density: options.density,
+      qualityTier: options.qualityTier,
     };
     switch (jobType) {
       case "flashcard":
@@ -528,6 +553,30 @@ export class JobProcessor {
         },
       },
       modelRoute: safeRouteMetadata(route),
+    };
+  }
+
+  private async attachInfographicStorage(
+    job: GenerationJob,
+    content: unknown,
+  ): Promise<unknown> {
+    if (!isRecord(content)) return content;
+    const image = isRecord(content.image) ? content.image : {};
+    const dataUrl = image.dataUrl?.toString();
+    const stored = await storeGeneratedImageFromDataUrl({
+      userId: job.owner_user_id,
+      jobId: job.id,
+      dataUrl,
+    });
+    if (!stored) return content;
+    return {
+      ...content,
+      image: {
+        ...image,
+        storageUrl: stored.storageUrl,
+        gcsBucket: stored.bucket,
+        gcsObjectName: stored.objectName,
+      },
     };
   }
 

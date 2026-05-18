@@ -733,6 +733,7 @@ String _baseForceJobType(GeneratedKind kind) {
     GeneratedKind.algorithm => 'algorithm',
     GeneratedKind.comparison || GeneratedKind.table => 'comparison',
     GeneratedKind.podcast => 'podcast',
+    GeneratedKind.infographic => 'infographic',
     GeneratedKind.mindMap => 'algorithm',
   };
 }
@@ -820,6 +821,7 @@ String _baseForceTitle(GeneratedKind kind) {
     GeneratedKind.algorithm => 'Algoritma',
     GeneratedKind.comparison || GeneratedKind.table => 'Karşılaştırma',
     GeneratedKind.podcast => 'Podcast',
+    GeneratedKind.infographic => 'İnfografik',
     GeneratedKind.mindMap => 'Zihin Haritası',
   };
 }
@@ -832,6 +834,7 @@ String _baseForceKindLabel(GeneratedKind kind) {
     GeneratedKind.algorithm => 'Algoritma',
     GeneratedKind.comparison || GeneratedKind.table => 'Tablo',
     GeneratedKind.podcast => 'Podcast',
+    GeneratedKind.infographic => 'İnfografik',
     GeneratedKind.mindMap => 'Zihin Haritası',
   };
 }

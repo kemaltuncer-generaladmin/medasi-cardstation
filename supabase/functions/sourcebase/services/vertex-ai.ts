@@ -38,6 +38,10 @@ export interface GenerationOptions {
   topK?: number;
   provider?: TextProvider;
   model?: string;
+  infographicType?: string;
+  visualStyle?: string;
+  density?: string;
+  qualityTier?: string;
 }
 
 export interface GenerationResult<T> {
@@ -572,12 +576,25 @@ Kurallar:
 - Robot, AI sparkle, neon cyber look ve yapay zeka klişelerinden kaçın
 - Çıktı yalnızca istenen JSON şemasında olmalı`;
 
+    const infographicType = options.infographicType ?? "clinical_flow";
+    const visualStyle = options.visualStyle ?? "academic";
+    const density = options.density ?? "balanced";
+    const qualityTier = options.qualityTier ?? "standard";
     const prompt = `Aşağıdaki kaynak metinden infografik içerik planı oluştur.
+Tercihler:
+- infographic_type: ${infographicType}
+- visual_style: ${visualStyle}
+- density: ${density}
+- quality_tier: ${qualityTier}
+
 JSON formatı:
 {
   "title": "...",
   "audience": "medical_student",
-  "style": "premium clinical academic",
+  "infographic_type": "${infographicType}",
+  "style": "${visualStyle}",
+  "density": "${density}",
+  "quality_tier": "${qualityTier}",
   "layout": "vertical infographic",
   "sections": [
     {"heading": "...", "bullets": ["...", "..."] }

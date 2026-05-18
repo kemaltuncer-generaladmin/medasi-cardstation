@@ -303,6 +303,10 @@ export async function createGenerationJob(
       maxTokens,
       routeOptions,
       pricing,
+      infographicType: textOption(payload.infographic_type),
+      visualStyle: textOption(payload.visual_style),
+      density: textOption(payload.density),
+      qualityTier,
     },
   };
   const job = await processor.createQueuedJob(jobInput);
@@ -401,6 +405,7 @@ export async function getJobStatus(
     outputTokens: job.output_tokens,
     costEstimate: job.cost_estimate,
     errorMessage: job.error_message,
+    errorCode: isRecord(job.metadata) ? job.metadata.errorCode : undefined,
     createdAt: job.created_at,
     updatedAt: job.updated_at,
   };
@@ -679,6 +684,11 @@ function optionalUuid(value: unknown, name: string) {
     throw new SafeError("INVALID_PAYLOAD", `${name} geçersiz.`, 400);
   }
   return text;
+}
+
+function textOption(value: unknown) {
+  const text = value?.toString().trim() ?? "";
+  return text || undefined;
 }
 
 function isUuid(value: string) {

@@ -390,8 +390,9 @@ DriveFileKind _kindFromText(String kind) {
     'application/vnd.openxmlformats-officedocument.presentationml.presentation' =>
       DriveFileKind.pptx,
     'doc' || 'application/msword' => DriveFileKind.doc,
-    'zip' || 'application/zip' || 'application/x-zip-compressed' =>
-      DriveFileKind.zip,
+    'zip' ||
+    'application/zip' ||
+    'application/x-zip-compressed' => DriveFileKind.zip,
     _ => DriveFileKind.docx,
   };
 }
@@ -431,6 +432,7 @@ String? _jobTypeForGeneratedKind(GeneratedKind kind) {
     GeneratedKind.algorithm => 'algorithm',
     GeneratedKind.comparison || GeneratedKind.table => 'comparison',
     GeneratedKind.podcast => 'podcast',
+    GeneratedKind.infographic => 'infographic',
     GeneratedKind.mindMap => null,
   };
 }
@@ -467,6 +469,7 @@ String _generatedTitle(GeneratedKind kind) {
     GeneratedKind.comparison => 'Karşılaştırma',
     GeneratedKind.podcast => 'Podcast',
     GeneratedKind.table => 'Tablo',
+    GeneratedKind.infographic => 'İnfografik',
     GeneratedKind.mindMap => 'Zihin Haritası',
   };
 }

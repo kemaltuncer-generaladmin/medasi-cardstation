@@ -47,6 +47,10 @@ import {
   extractPptx,
   sanitizeSourceText,
 } from "../services/extraction.ts";
+import {
+  normalizeSourceFileType,
+  userMessageForLimitedLegacyType,
+} from "../services/file-types.ts";
 
 const MAX_EXPLICIT_SOURCE_CHARS = 120_000;
 const MAX_CHAT_MESSAGE_CHARS = 4_000;
@@ -131,7 +135,12 @@ async function extractTextFromDriveFile(userId: string, fileId: string) {
   const file = files[0];
   const bucket = String(file.gcs_bucket ?? "");
   const objectName = String(file.gcs_object_name ?? "");
-  const fileType = String(file.file_type ?? "");
+  const normalizedFileType = normalizeSourceFileType({
+    fileName: String(file.original_filename ?? file.title ?? objectName),
+    contentType: String(file.mime_type ?? ""),
+  });
+  const fileType = String(file.file_type ?? "") ||
+    normalizedFileType.type;
   if (!bucket || !objectName || !objectName.startsWith(`user/${userId}/`)) {
     throw new SafeError(
       "FILE_STORAGE_INVALID",
@@ -166,21 +175,27 @@ async function extractTextFromDriveFile(userId: string, fileId: string) {
       break;
     case "ppt":
       throw new SafeError(
-        "LEGACY_PPT_UNSUPPORTED",
-        "PPTX desteklenir; eski PPT dosyaları için lütfen dosyayı PPTX olarak kaydedip tekrar yükleyin.",
+        "FILE_TYPE_LIMITED_SUPPORT",
+        userMessageForLimitedLegacyType("ppt"),
+        400,
+      );
+    case "doc":
+      throw new SafeError(
+        "FILE_TYPE_LIMITED_SUPPORT",
+        userMessageForLimitedLegacyType("doc"),
         400,
       );
     default:
       throw new SafeError(
-        "UNSUPPORTED_FILE_TYPE",
-        "Bu dosya tipi desteklenmiyor.",
+        "FILE_TYPE_UNSUPPORTED",
+        "Bu dosya türü desteklenmiyor. PDF, PPTX, PPT, DOCX veya DOC yükleyin.",
         400,
       );
   }
 
   if (!extractionResult.text.trim()) {
     throw new SafeError(
-      "EXTRACTION_EMPTY",
+      "FILE_TEXT_EMPTY",
       "Dosyadan okunabilir metin çıkarılamadı.",
       400,
     );

@@ -109,7 +109,6 @@ class DriveUploadService {
     if (lower.endsWith('.docx')) {
       return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     }
-    if (lower.endsWith('.zip')) return 'application/zip';
     return 'application/octet-stream';
   }
 }

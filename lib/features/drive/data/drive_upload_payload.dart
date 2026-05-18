@@ -19,8 +19,7 @@ class PickedDriveFile {
         lower.endsWith('.ppt') ||
         lower.endsWith('.pptx') ||
         lower.endsWith('.doc') ||
-        lower.endsWith('.docx') ||
-        lower.endsWith('.zip');
+        lower.endsWith('.docx');
   }
 
   bool get hasReadableContent => sizeBytes > 0 && bytes.isNotEmpty;

@@ -428,7 +428,10 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
     }
   }
 
-  Future<void> _uploadToSection(DriveCourse course, DriveSection section) async {
+  Future<void> _uploadToSection(
+    DriveCourse course,
+    DriveSection section,
+  ) async {
     setState(() {
       selectedCourseId = course.id;
       selectedSectionId = section.id;
@@ -759,11 +762,7 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
     });
   }
 
-  void _markLocalUploadFailed(
-    String localId,
-    DriveFile file,
-    Object error,
-  ) {
+  void _markLocalUploadFailed(String localId, DriveFile file, Object error) {
     final failed = file.copyWith(
       id: localId,
       status: DriveItemStatus.failed,
@@ -824,7 +823,7 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
 
   String? _pickedFileError(PickedDriveFile file) {
     if (!file.hasSupportedExtension) {
-      return 'Bu dosya türü desteklenmiyor. PDF, PPT, DOC veya ZIP yükleyin.';
+      return 'Bu dosya türü desteklenmiyor. PDF, PPTX, PPT, DOCX veya DOC yükleyin.';
     }
     if (!file.hasReadableContent) {
       return 'Dosya okunamadı veya boş görünüyor.';
@@ -872,13 +871,16 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
         if (file.id != fileId) return file;
         return _fileWithUploadStatus(file, status);
       }
+
       data = data.copyWith(
         courses: [
           for (final course in data.courses)
             course.copyWith(
               sections: [
                 for (final section in course.sections)
-                  section.copyWith(files: section.files.map(updateFile).toList()),
+                  section.copyWith(
+                    files: section.files.map(updateFile).toList(),
+                  ),
               ],
             ),
         ],
@@ -916,7 +918,6 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
       return DriveFileKind.pptx;
     }
     if (lower.endsWith('.doc')) return DriveFileKind.doc;
-    if (lower.endsWith('.zip')) return DriveFileKind.zip;
     return DriveFileKind.docx;
   }
 
@@ -979,10 +980,7 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
     if (!mounted) return;
     final safeMessage = _friendlyMessage(message);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(safeMessage),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(safeMessage), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -1008,6 +1006,30 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
     }
     if (text.contains('SourceBase request failed')) {
       return 'Drive işlemi tamamlanamadı. Lütfen tekrar deneyin.';
+    }
+    if (text.contains('FILE_SCANNED_PDF_OCR_REQUIRED')) {
+      return 'Bu PDF taranmış/görsel tabanlı görünüyor. Metin çıkarılamadı. OCR desteği gerekir.';
+    }
+    if (text.contains('FILE_TEXT_EMPTY')) {
+      return 'Bu dosyadan okunabilir metin çıkarılamadı.';
+    }
+    if (text.contains('FILE_TYPE_LIMITED_SUPPORT')) {
+      final message = text.replaceFirst('FILE_TYPE_LIMITED_SUPPORT: ', '');
+      return message.isEmpty
+          ? 'Bu dosya türü şu anda sınırlı destekleniyor. Lütfen .pptx veya .docx olarak tekrar yükleyin.'
+          : message;
+    }
+    if (text.contains('FILE_TYPE_UNSUPPORTED')) {
+      return 'Bu dosya türü desteklenmiyor. PDF, PPTX, PPT, DOCX veya DOC yükleyin.';
+    }
+    if (text.contains('FILE_OBJECT_MISSING')) {
+      return 'Yüklenen dosya depolama alanında bulunamadı. Lütfen tekrar yükleyin.';
+    }
+    if (text.contains('FILE_OBJECT_EMPTY')) {
+      return 'Yüklenen dosya boş görünüyor.';
+    }
+    if (text.contains('FILE_PARSE_FAILED')) {
+      return 'Dosyadan metin çıkarılamadı. Lütfen dosyayı kontrol edip tekrar yükleyin.';
     }
     if (text.contains('GCS upload failed') || text.contains('XMLHttpRequest')) {
       return 'Dosya yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.';

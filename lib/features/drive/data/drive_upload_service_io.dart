@@ -11,7 +11,7 @@ class DriveUploadService {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'zip'],
+      allowedExtensions: const ['pdf', 'ppt', 'pptx', 'doc', 'docx'],
       withData: true,
     );
     final picked = result?.files.singleOrNull;
@@ -75,7 +75,6 @@ class DriveUploadService {
     if (lower.endsWith('.docx')) {
       return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     }
-    if (lower.endsWith('.zip')) return 'application/zip';
     return 'application/octet-stream';
   }
 }

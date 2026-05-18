@@ -70,16 +70,16 @@ function extractionResult(
   pageCount?: number,
 ): ExtractionResult & { chunks: string[] } {
   const text = sanitizeSourceText(rawText);
-  if (text.length < MIN_EXTRACTED_TEXT_CHARS) {
+  if (usefulTextLength(text) < MIN_EXTRACTED_TEXT_CHARS) {
     if (fileType === "pdf") {
       throw new SafeError(
-        "PDF_OCR_REQUIRED",
-        "Bu PDF tarama/görsel tabanlı görünüyor; okunabilir metin için OCR gerekiyor.",
+        "FILE_SCANNED_PDF_OCR_REQUIRED",
+        "Bu PDF taranmış/görsel tabanlı görünüyor. Metin çıkarılamadı. OCR desteği gerekir.",
         400,
       );
     }
     throw new SafeError(
-      "EXTRACTION_EMPTY",
+      "FILE_TEXT_EMPTY",
       "Dosyadan okunabilir metin çıkarılamadı.",
       400,
     );
@@ -123,7 +123,7 @@ export async function extractText(
       default:
         throw new SafeError(
           "UNSUPPORTED_FILE_TYPE",
-          "Desteklenmeyen dosya tipi.",
+          "Bu dosya türü desteklenmiyor. PDF, PPTX, PPT, DOCX veya DOC yükleyin.",
           400,
         );
     }
@@ -134,7 +134,7 @@ export async function extractText(
       throw error;
     }
     throw new SafeError(
-      "EXTRACTION_FAILED",
+      "FILE_PARSE_FAILED",
       "Dosyadan metin çıkarılamadı.",
       500,
     );
@@ -163,7 +163,11 @@ async function downloadFile(url: string): Promise<ArrayBuffer> {
 
     const buffer = await response.arrayBuffer();
     if (buffer.byteLength <= 0) {
-      throw new SafeError("FILE_EMPTY", "Dosya boş görünüyor.", 400);
+      throw new SafeError(
+        "FILE_OBJECT_EMPTY",
+        "Yüklenen dosya boş görünüyor.",
+        400,
+      );
     }
     if (buffer.byteLength > MAX_EXTRACTION_BYTES) {
       throw new SafeError(
@@ -178,8 +182,8 @@ async function downloadFile(url: string): Promise<ArrayBuffer> {
       throw error;
     }
     throw new SafeError(
-      "GCS_DOWNLOAD_FAILED",
-      "Dosya indirilemedi.",
+      "FILE_OBJECT_MISSING",
+      "Yüklenen dosya depolama alanında bulunamadı.",
       500,
     );
   }
@@ -212,7 +216,10 @@ async function extractFromDOCX(content: ArrayBuffer): Promise<string> {
       name.startsWith("word/header") ||
       name.startsWith("word/footer"),
   );
-  return entries.map(extractOfficeXmlText).join("\n");
+  return entries
+    .map((entry) => extractOfficeXmlText(entry.text))
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 async function extractFromPPTX(content: ArrayBuffer): Promise<string> {
@@ -223,7 +230,14 @@ async function extractFromPPTX(content: ArrayBuffer): Promise<string> {
       name.startsWith("ppt/notesSlides/notesSlide") ||
       name.startsWith("ppt/slideMasters/slideMaster"),
   );
-  return entries.map(extractOfficeXmlText).join("\n\n");
+  return entries
+    .map((entry, index) => {
+      const text = extractOfficeXmlText(entry.text);
+      if (!text) return "";
+      return `Slayt ${index + 1}\n${text}`;
+    })
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function latin1Decode(bytes: Uint8Array) {
@@ -346,12 +360,18 @@ async function unzipTextEntries(
 ) {
   const bytes = new Uint8Array(content);
   const view = new DataView(content);
-  const entries: string[] = [];
+  const entries: { name: string; text: string }[] = [];
 
-  for (const entry of zipCentralDirectoryEntries(bytes, view)) {
+  const zipEntries = zipCentralDirectoryEntries(bytes, view)
+    .filter((entry) => shouldRead(entry.name) && entry.name.endsWith(".xml"))
+    .sort((a, b) => naturalCompare(a.name, b.name));
+
+  for (const entry of zipEntries) {
     if (!shouldRead(entry.name) || !entry.name.endsWith(".xml")) continue;
     const data = await readZipEntry(bytes, view, entry);
-    if (data) entries.push(new TextDecoder().decode(data));
+    if (data) {
+      entries.push({ name: entry.name, text: new TextDecoder().decode(data) });
+    }
   }
 
   return entries;
@@ -442,18 +462,31 @@ async function inflateBytes(bytes: Uint8Array, raw = false) {
 }
 
 function extractOfficeXmlText(xml: string) {
-  const parts: string[] = [];
-  for (
-    const match of xml.matchAll(
-      /<(?:\w+:)?t\b[^>]*>([\s\S]*?)<\/(?:\w+:)?t>/g,
-    )
-  ) {
-    parts.push(decodeXmlEntities(match[1] ?? ""));
+  const paragraphs: string[] = [];
+  const paragraphMatches = [
+    ...xml.matchAll(/<(?:\w+:)?p\b[^>]*>([\s\S]*?)<\/(?:\w+:)?p>/g),
+  ];
+  const blocks = paragraphMatches.length > 0
+    ? paragraphMatches.map((match) => match[1] ?? "")
+    : [xml];
+
+  for (const block of blocks) {
+    const parts: string[] = [];
+    for (
+      const match of block.matchAll(
+        /<(?:\w+:)?t\b[^>]*>([\s\S]*?)<\/(?:\w+:)?t>/g,
+      )
+    ) {
+      parts.push(decodeXmlEntities(match[1] ?? ""));
+    }
+    if (parts.length === 0) {
+      parts.push(decodeXmlEntities(block.replace(/<[^>]+>/g, " ")));
+    }
+    const text = parts.join(" ").replace(/\s{2,}/g, " ").trim();
+    if (text) paragraphs.push(text);
   }
-  if (parts.length === 0) {
-    parts.push(decodeXmlEntities(xml.replace(/<[^>]+>/g, " ")));
-  }
-  return parts.join(" ").replace(/\s{2,}/g, " ").trim();
+
+  return paragraphs.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function decodeXmlEntities(value: string) {
@@ -474,8 +507,17 @@ export function sanitizeSourceText(text: string): string {
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "") // Kontrol karakterlerini kaldır
     .replace(/\r\n/g, "\n") // Windows line endings'i normalize et
     .replace(/\r/g, "\n") // Mac line endings'i normalize et
+    .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n") // Fazla boş satırları temizle
     .trim();
+}
+
+function usefulTextLength(text: string) {
+  return text.replace(/[\s\W_]+/g, "").length;
+}
+
+function naturalCompare(a: string, b: string) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
 /**

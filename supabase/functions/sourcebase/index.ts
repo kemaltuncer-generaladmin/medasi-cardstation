@@ -20,6 +20,11 @@ import {
   processGenerationJob,
   retryJob,
 } from "./actions/ai-generation.ts";
+import {
+  canonicalContentTypeFor,
+  isSupportedSourceFileType,
+  normalizeSourceFileType,
+} from "./services/file-types.ts";
 
 type JsonMap = Record<string, unknown>;
 type GcsObjectMetadata = {
@@ -33,43 +38,6 @@ const MAX_TITLE_LENGTH = 120;
 const MAX_SECTION_TITLE_LENGTH = 120;
 const MAX_INITIAL_SECTIONS = 25;
 const MAX_BATCH_FILE_IDS = 100;
-
-const SUPPORTED_UPLOAD_TYPES: Record<
-  string,
-  { fileType: string; mimeTypes: string[] }
-> = {
-  pdf: {
-    fileType: "pdf",
-    mimeTypes: ["application/pdf", "application/octet-stream"],
-  },
-  docx: {
-    fileType: "docx",
-    mimeTypes: [
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/zip",
-      "application/octet-stream",
-    ],
-  },
-  ppt: {
-    fileType: "ppt",
-    mimeTypes: [
-      "application/vnd.ms-powerpoint",
-      "application/mspowerpoint",
-      "application/powerpoint",
-      "application/x-mspowerpoint",
-      "application/octet-stream",
-    ],
-  },
-  pptx: {
-    fileType: "pptx",
-    mimeTypes: [
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "application/vnd.ms-powerpoint",
-      "application/zip",
-      "application/octet-stream",
-    ],
-  },
-};
 
 const GENERATED_OUTPUT_TYPES = new Set([
   "flashcard",
@@ -595,6 +563,12 @@ async function completeUpload(userId: string, payload: JsonMap) {
     await processFileExtraction(userId, { fileId: row.id });
   } catch (error) {
     const metadata = isRecord(row.metadata) ? row.metadata : {};
+    const errorCode = error instanceof SafeError
+      ? error.code
+      : "FILE_PARSE_FAILED";
+    const errorMessage = error instanceof SafeError
+      ? error.message
+      : "Dosya metni çıkarılamadı.";
     await dbPatch(
       "drive_files",
       `id=eq.${row.id}&owner_user_id=eq.${userId}`,
@@ -602,22 +576,13 @@ async function completeUpload(userId: string, payload: JsonMap) {
         ai_status: "failed",
         metadata: {
           ...metadata,
-          extractionError: error instanceof SafeError
-            ? error.message
-            : "Dosya metni çıkarılamadı.",
+          extractionErrorCode: errorCode,
+          extractionError: errorMessage,
           extractionFailedAt: new Date().toISOString(),
         },
       },
     );
-    const [failedRow] = await dbSelect(
-      `drive_files?id=eq.${row.id}&owner_user_id=eq.${userId}&select=*&limit=1`,
-    );
-    return {
-      row: failedRow ?? row,
-      objectName,
-      status: "processing_failed",
-      nextAction: "retry_file_processing",
-    };
+    throw error;
   }
 
   const [readyRow] = await dbSelect(
@@ -712,15 +677,20 @@ async function retryFileProcessing(userId: string, payload: JsonMap) {
   try {
     await processFileExtraction(userId, { fileId });
   } catch (error) {
+    const errorCode = error instanceof SafeError
+      ? error.code
+      : "FILE_PARSE_FAILED";
+    const errorMessage = error instanceof SafeError
+      ? error.message
+      : "Dosya metni çıkarılamadı.";
     await dbPatch(
       "drive_files",
       `id=eq.${fileId}&owner_user_id=eq.${userId}`,
       {
         ai_status: "failed",
         metadata: {
-          extractionError: error instanceof SafeError
-            ? error.message
-            : "Dosya metni çıkarılamadı.",
+          extractionErrorCode: errorCode,
+          extractionError: errorMessage,
           extractionFailedAt: new Date().toISOString(),
         },
       },
@@ -1109,7 +1079,7 @@ async function getGcsObjectMetadata(input: {
   );
   if (response.status === 404) {
     throw new SafeError(
-      "UPLOAD_NOT_FOUND",
+      "FILE_OBJECT_MISSING",
       "Yüklenen dosya depolama alanında bulunamadı.",
       400,
     );
@@ -1133,7 +1103,7 @@ async function getGcsObjectMetadata(input: {
   const contentLength = Number(metadata?.size ?? 0);
   if (!Number.isFinite(contentLength) || contentLength <= 0) {
     throw new SafeError(
-      "UPLOAD_EMPTY",
+      "FILE_OBJECT_EMPTY",
       "Yüklenen dosya boş görünüyor.",
       400,
     );
@@ -1439,31 +1409,47 @@ function validateUploadFile(
     );
   }
   const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
-  const supported = SUPPORTED_UPLOAD_TYPES[extension];
-  if (!supported) {
+  const normalized = normalizeSourceFileType({
+    fileName,
+    contentType: rawNormalizedContentType,
+  });
+  if (!extension || normalized.extensionType === "unknown") {
     throw new SafeError(
-      "UNSUPPORTED_FILE_TYPE",
-      "Bu dosya tipi desteklenmiyor.",
+      "FILE_TYPE_UNSUPPORTED",
+      "Bu dosya türü desteklenmiyor. PDF, PPTX, PPT, DOCX veya DOC yükleyin.",
       400,
     );
   }
-  if (!supported.mimeTypes.includes(rawNormalizedContentType)) {
+  if (!isSupportedSourceFileType(normalized.type)) {
     throw new SafeError(
-      "UNSUPPORTED_MIME_TYPE",
+      "FILE_TYPE_UNSUPPORTED",
+      "Bu dosya türü desteklenmiyor. PDF, PPTX, PPT, DOCX veya DOC yükleyin.",
+      400,
+    );
+  }
+  if (
+    normalized.mimeTypeType === "unknown" &&
+    !normalized.isGenericMime &&
+    rawNormalizedContentType
+  ) {
+    throw new SafeError(
+      "FILE_TYPE_UNSUPPORTED",
       "Dosya MIME tipi desteklenmiyor.",
       400,
     );
   }
-  const contentType = supported.mimeTypes[0];
-  return { fileName, contentType, fileType: supported.fileType };
+  const contentType = canonicalContentTypeFor(normalized.type);
+  return { fileName, contentType, fileType: normalized.type };
 }
 
 function isAllowedMimeForFileType(fileType: string, contentType: string) {
-  const normalized = contentType.toLowerCase().split(";")[0].trim();
-  const supported = Object.values(SUPPORTED_UPLOAD_TYPES).find((item) =>
-    item.fileType === fileType
-  );
-  return Boolean(supported?.mimeTypes.includes(normalized));
+  const normalized = normalizeSourceFileType({
+    fileName: `source.${fileType}`,
+    contentType,
+  });
+  return normalized.type === fileType ||
+    normalized.extensionType === fileType && normalized.isGenericMime ||
+    normalized.extensionType === fileType && normalized.mismatch;
 }
 
 function assertCompletedUploadMatches(input: {
@@ -1490,10 +1476,7 @@ function assertCompletedUploadMatches(input: {
   const uploadedContentType = input.metadata.contentType.toLowerCase().split(
     ";",
   )[0].trim();
-  if (
-    uploadedContentType !== input.expectedContentType ||
-    !isAllowedMimeForFileType(input.expectedFileType, uploadedContentType)
-  ) {
+  if (!isAllowedMimeForFileType(input.expectedFileType, uploadedContentType)) {
     throw new SafeError(
       "UPLOAD_INVALID",
       "Yüklenen dosya doğrulanamadı.",

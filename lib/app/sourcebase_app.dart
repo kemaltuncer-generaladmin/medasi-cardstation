@@ -66,7 +66,9 @@ class _SourceBaseAppState extends State<SourceBaseApp> {
                 VerifyEmailScreen.route: (_) => const VerifyEmailScreen(),
                 ProfileSetupScreen.route: (_) => const ProfileSetupScreen(),
                 AuthCallbackScreen.route: (_) => const AuthCallbackScreen(),
-                DriveWorkspaceScreen.route: (_) => const DriveWorkspaceScreen(),
+                DriveWorkspaceScreen.route: (_) => const _AuthProtectedRoute(
+                      child: DriveWorkspaceScreen(),
+                    ),
               },
             ));
   }
@@ -87,5 +89,52 @@ class _SourceBaseAppState extends State<SourceBaseApp> {
       return ProfileSetupScreen.route;
     }
     return DriveWorkspaceScreen.route;
+  }
+}
+
+class _AuthProtectedRoute extends StatelessWidget {
+  const _AuthProtectedRoute({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final redirectRoute = _redirectRoute;
+    if (redirectRoute == null) {
+      return child;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) {
+        return;
+      }
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        redirectRoute,
+        (_) => false,
+        arguments: redirectRoute == LoginScreen.route
+            ? const {
+                'error': 'Oturum doğrulanamadı. Lütfen tekrar giriş yap.',
+              }
+            : null,
+      );
+    });
+
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  String? get _redirectRoute {
+    if (!SourceBaseAuthBackend.isConfigured ||
+        SourceBaseAuthBackend.currentUser == null) {
+      return LoginScreen.route;
+    }
+    if (!SourceBaseAuthBackend.currentUserHasVerifiedEmail) {
+      return VerifyEmailScreen.route;
+    }
+    if (SourceBaseAuthBackend.currentUserNeedsSourceBaseProfile) {
+      return ProfileSetupScreen.route;
+    }
+    return null;
   }
 }

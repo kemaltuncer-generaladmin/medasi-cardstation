@@ -18,7 +18,12 @@ import {
   requireString,
   SafeError,
 } from "../types.ts";
-import { JobProcessor } from "../services/job-processor.ts";
+import { logAiPipeline } from "../services/ai-logger.ts";
+import {
+  JobGenerationOptions,
+  JobProcessor,
+} from "../services/job-processor.ts";
+import type { McPricingQuote } from "../services/medasicoin-pricing.ts";
 import {
   estimateGenerationPricing,
   normalizeQualityTier,
@@ -221,6 +226,11 @@ export async function createGenerationJob(
 ): Promise<unknown> {
   const fileId = optionalUuid(payload.fileId, "fileId");
   const jobType = normalizeJobType(requireString(payload.jobType, "jobType"));
+  logAiPipeline({
+    action: "create_generation_job",
+    status: "received",
+    jobType,
+  });
   if (fileId) {
     await assertDriveFileOwned(userId, fileId);
   }
@@ -327,6 +337,16 @@ export async function createGenerationJob(
     },
   };
   const job = await processor.createQueuedJob(jobInput);
+  logAiPipeline({
+    action: "create_generation_job",
+    status: "queued",
+    jobId: job.id,
+    jobType,
+    provider: job.metadata?.modelRoute && isRecord(job.metadata.modelRoute)
+      ? job.metadata.modelRoute.provider?.toString()
+      : undefined,
+    model: job.model,
+  });
   const reservation = await reserveMedasiCoin({
     config: walletConfig,
     userId,
@@ -334,7 +354,6 @@ export async function createGenerationJob(
     quote: pricing,
     reason: `ai_generation:${jobType}`,
   });
-  scheduleJobProcessing(processor, job, jobInput);
 
   return {
     jobId: job.id,
@@ -344,6 +363,107 @@ export async function createGenerationJob(
     ...pricing,
     balance_before: reservation.balance_before,
     balance_after_reserve: reservation.balance_after_reserve,
+  };
+}
+
+export async function processGenerationJob(
+  userId: string,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  const jobId = requireUuid(payload.jobId, "jobId");
+  logAiPipeline({
+    action: "process_generation_job",
+    status: "received",
+    jobId,
+  });
+
+  const processor = createJobProcessor();
+  const job = await processor.getJobStatus(userId, jobId);
+  if (job.status === "completed") {
+    return {
+      jobId: job.id,
+      status: job.status,
+      jobType: job.job_type,
+      alreadyCompleted: true,
+    };
+  }
+  if (job.status === "cancelled") {
+    throw new SafeError("JOB_CANCELLED", "İş iptal edilmiş.", 400);
+  }
+  if (job.status === "failed") {
+    const metadata = isRecord(job.metadata) ? job.metadata : {};
+    throw new SafeError(
+      metadata.errorCode?.toString() || "JOB_ALREADY_FAILED",
+      job.error_message || "AI üretimi tamamlanamadı.",
+      400,
+    );
+  }
+
+  const sourceText = await sourceTextForJob(userId, job);
+  const processed = await processor.processJob(job, {
+    jobType: job.job_type,
+    sourceText,
+    options: generationOptionsFromJob(job.metadata),
+  });
+
+  return {
+    jobId: processed.id,
+    status: processed.status,
+    jobType: processed.job_type,
+    inputTokens: processed.input_tokens,
+    outputTokens: processed.output_tokens,
+    costEstimate: processed.cost_estimate,
+  };
+}
+
+async function sourceTextForJob(userId: string, job: GenerationJob) {
+  if (job.source_file_id) {
+    return (await extractTextFromDriveFile(userId, job.source_file_id)).text;
+  }
+  const metadata = isRecord(job.metadata) ? job.metadata : {};
+  const sourceText = sanitizeSourceText(metadata.sourceText?.toString() ?? "");
+  if (sourceText.trim()) return sourceText;
+  throw new SafeError(
+    "SOURCE_TEXT_REQUIRED",
+    "Üretim işi için kaynak metin bulunamadı.",
+    400,
+  );
+}
+
+function generationOptionsFromJob(
+  metadataValue: unknown,
+): JobGenerationOptions {
+  const metadata = isRecord(metadataValue) ? metadataValue : {};
+  const options = isRecord(metadata.generationOptions)
+    ? metadata.generationOptions
+    : {};
+  return {
+    count: numericOption(options.count),
+    temperature: numericOption(options.temperature),
+    maxTokens: numericOption(options.maxTokens),
+    routeOptions: isRecord(options.routeOptions) ? options.routeOptions : {},
+    pricing: isRecord(metadata.pricing)
+      ? metadata.pricing as unknown as McPricingQuote
+      : undefined,
+    summaryMode: textOption(options.summaryMode),
+    lengthTarget: textOption(options.lengthTarget),
+    outputFormat: textOption(options.outputFormat),
+    algorithmType: textOption(options.algorithmType),
+    comparisonType: textOption(options.comparisonType),
+    tableFormat: textOption(options.tableFormat),
+    detailLevel: textOption(options.detailLevel),
+    infographicType: textOption(options.infographicType),
+    visualStyle: textOption(options.visualStyle),
+    density: textOption(options.density),
+    mapType: textOption(options.mapType),
+    depth: textOption(options.depth),
+    viewMode: textOption(options.viewMode),
+    scenarioType: textOption(options.scenarioType),
+    difficulty: textOption(options.difficulty),
+    planGoal: textOption(options.planGoal),
+    dailyTime: textOption(options.dailyTime),
+    studyStyle: textOption(options.studyStyle),
+    qualityTier: textOption(options.qualityTier),
   };
 }
 
@@ -708,6 +828,12 @@ function textOption(value: unknown) {
   return text || undefined;
 }
 
+function numericOption(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     .test(value);
@@ -830,31 +956,4 @@ async function buildOwnedFileContext(
     0,
     MAX_CHAT_CONTEXT_CHARS,
   );
-}
-
-function scheduleJobProcessing(
-  processor: JobProcessor,
-  job: GenerationJob,
-  input: {
-    jobType: GenerationType;
-    sourceText: string;
-    options?: {
-      count?: number;
-      temperature?: number;
-      maxTokens?: number;
-    };
-  },
-) {
-  const task = processor.processJob(job, input).catch((error) => {
-    const safeCode = error instanceof SafeError
-      ? error.code
-      : "BACKGROUND_JOB_FAILED";
-    console.error("AI job background processing failed:", safeCode);
-  });
-  const edgeRuntime = (globalThis as {
-    EdgeRuntime?: { waitUntil: (promise: Promise<unknown>) => void };
-  }).EdgeRuntime;
-  if (edgeRuntime?.waitUntil) {
-    edgeRuntime.waitUntil(task);
-  }
 }

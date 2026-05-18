@@ -12,6 +12,7 @@ import {
   JobStatus,
   SafeError,
 } from "../types.ts";
+import { logAiPipeline } from "./ai-logger.ts";
 import { storeGeneratedImageFromDataUrl } from "./generated-image-storage.ts";
 import { generateInfographicImage } from "./image-provider.ts";
 import { captureMedasiCoin, refundMedasiCoin } from "./medasicoin-wallet.ts";
@@ -213,7 +214,7 @@ export interface JobProcessorConfig {
   vertexServiceAccountJson: string;
 }
 
-type JobGenerationOptions = {
+export type JobGenerationOptions = {
   count?: number;
   temperature?: number;
   maxTokens?: number;
@@ -293,7 +294,12 @@ export class JobProcessor {
           sourceTextLength: input.sourceText.length,
           modelRoute: safeRouteMetadata(route),
           pricing: input.options?.pricing,
+          sourceText: input.sourceFileId ? undefined : input.sourceText,
           generationOptions: {
+            count: input.options?.count,
+            temperature: input.options?.temperature,
+            maxTokens: input.options?.maxTokens,
+            routeOptions: input.options?.routeOptions,
             summaryMode: input.options?.summaryMode,
             lengthTarget: input.options?.lengthTarget,
             outputFormat: input.options?.outputFormat,
@@ -334,13 +340,42 @@ export class JobProcessor {
         status: "processing",
       },
     );
+    const route = resolveTextRoute(
+      input.jobType,
+      input.options?.routeOptions,
+      input.sourceText.length,
+    );
+    logAiPipeline({
+      action: "process_generation_job",
+      status: "processing",
+      jobId: job.id,
+      jobType: input.jobType,
+      provider: route.provider,
+      model: route.model,
+    });
 
     try {
+      logAiPipeline({
+        action: "process_generation_job",
+        status: "provider_start",
+        jobId: job.id,
+        jobType: input.jobType,
+        provider: route.provider,
+        model: route.model,
+      });
       const result = await this.generate(
         input.jobType,
         input.sourceText,
         input.options ?? {},
       );
+      logAiPipeline({
+        action: "process_generation_job",
+        status: "provider_done",
+        jobId: job.id,
+        jobType: input.jobType,
+        provider: result.modelRoute.provider,
+        model: result.modelRoute.model,
+      });
       const content = input.jobType === "infographic"
         ? await this.attachInfographicStorage(job, result.content)
         : result.content;
@@ -358,6 +393,14 @@ export class JobProcessor {
         modelRoute: result.modelRoute,
         completedAt,
       });
+      logAiPipeline({
+        action: "process_generation_job",
+        status: "output_saved",
+        jobId: job.id,
+        jobType: input.jobType,
+        provider: result.modelRoute.provider,
+        model: result.modelRoute.model,
+      });
       await updateJob(
         this.config.supabaseUrl,
         this.config.serviceRoleKey,
@@ -371,6 +414,14 @@ export class JobProcessor {
           metadata: completedMetadata,
         },
       );
+      logAiPipeline({
+        action: "process_generation_job",
+        status: "completed",
+        jobId: job.id,
+        jobType: input.jobType,
+        provider: result.modelRoute.provider,
+        model: result.modelRoute.model,
+      });
       await captureMedasiCoin({
         config: this.config,
         userId: job.owner_user_id,
@@ -389,6 +440,15 @@ export class JobProcessor {
       };
     } catch (error) {
       const errorCode = error instanceof SafeError ? error.code : "AI_FAILED";
+      logAiPipeline({
+        action: "process_generation_job",
+        status: "failed",
+        jobId: job.id,
+        jobType: input.jobType,
+        provider: route.provider,
+        model: route.model,
+        errorCode,
+      });
       const pricing = isPricingQuote(job.metadata?.pricing)
         ? job.metadata.pricing
         : undefined;
@@ -663,7 +723,13 @@ async function persistGeneratedOutput(
   },
 ): Promise<GeneratedOutputRow | null> {
   const fileId = input.job.source_file_id?.trim();
-  if (!fileId) return null;
+  if (!fileId) {
+    throw new SafeError(
+      "SOURCE_FILE_REQUIRED_FOR_OUTPUT",
+      "Üretilen içerik kaydı için kaynak dosya gerekli.",
+      400,
+    );
+  }
   if (isEmptyGeneratedContent(input.content)) {
     throw new SafeError(
       "GENERATED_CONTENT_EMPTY",
@@ -836,27 +902,29 @@ function isEmptyGeneratedContent(content: unknown) {
 function countGeneratedItems(content: unknown): number | undefined {
   if (Array.isArray(content)) return content.length || undefined;
   if (!isRecord(content)) return undefined;
-  for (const key of [
-    "cards",
-    "flashcards",
-    "questions",
-    "bulletPoints",
-    "must_know",
-    "commonly_confused",
-    "clinical_tus_tips",
-    "self_check",
-    "steps",
-    "rows",
-    "segments",
-    "chapters",
-    "days",
-    "nodes",
-    "branches",
-    "sections",
-    "teachingPoints",
-    "objectives",
-    "sessions",
-  ]) {
+  for (
+    const key of [
+      "cards",
+      "flashcards",
+      "questions",
+      "bulletPoints",
+      "must_know",
+      "commonly_confused",
+      "clinical_tus_tips",
+      "self_check",
+      "steps",
+      "rows",
+      "segments",
+      "chapters",
+      "days",
+      "nodes",
+      "branches",
+      "sections",
+      "teachingPoints",
+      "objectives",
+      "sessions",
+    ]
+  ) {
     const value = content[key];
     if (Array.isArray(value) && value.length > 0) return value.length;
   }

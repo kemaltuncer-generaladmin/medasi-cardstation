@@ -17,6 +17,7 @@ import {
   getJobStatus,
   listUserJobs,
   processFileExtraction,
+  processGenerationJob,
   retryJob,
 } from "./actions/ai-generation.ts";
 
@@ -135,6 +136,8 @@ Deno.serve(async (request) => {
         return success(await processFileExtraction(user.id, payload));
       case "create_generation_job":
         return success(await createGenerationJob(user.id, payload));
+      case "process_generation_job":
+        return success(await processGenerationJob(user.id, payload));
       case "estimate_generation_cost":
         return success(await estimateGenerationCost(user.id, payload));
       case "get_job_status":

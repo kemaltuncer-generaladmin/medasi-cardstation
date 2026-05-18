@@ -417,6 +417,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         throw StateError('AI üretim işi başlatılamadı.');
       }
       _updateJob(job.localId, jobId: jobId, status: _JobUiStatus.running);
+      await _api.processGenerationJob(jobId);
       final content = await _pollGeneratedContent(job.localId, jobId, kind);
       final result = _GenerationResult(
         kind: kind,

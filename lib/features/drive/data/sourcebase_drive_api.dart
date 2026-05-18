@@ -187,6 +187,10 @@ class SourceBaseDriveApi {
     return invoke('get_job_status', payload: {'jobId': jobId});
   }
 
+  Future<Map<String, dynamic>> processGenerationJob(String jobId) {
+    return invoke('process_generation_job', payload: {'jobId': jobId});
+  }
+
   Future<Map<String, dynamic>> getGeneratedContent(String jobId) {
     return invoke('get_generated_content', payload: {'jobId': jobId});
   }

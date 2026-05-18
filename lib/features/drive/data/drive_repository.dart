@@ -117,6 +117,7 @@ class DriveRepository {
       if (jobId.isEmpty) {
         throw StateError('AI üretim işi başlatılamadı.');
       }
+      await api.processGenerationJob(jobId);
       final content = await _waitForGeneratedContent(api, jobId);
       itemCount = _contentItemCount(content);
     }
@@ -288,9 +289,7 @@ DriveFile _fileFromRow(
 
 GeneratedOutput _outputFromRow(Map<String, dynamic> row) {
   final rawType = _text(row['output_type'], fallback: _text(row['kind']));
-  final kind = _generatedKindFromText(
-    rawType,
-  );
+  final kind = _generatedKindFromText(rawType);
   final metadata = _map(row['metadata']);
   final content = metadata['content'];
   final itemCount = _int(row['item_count']);
@@ -429,8 +428,7 @@ GeneratedKind _generatedKindFromText(String kind) {
     'algorithm' => GeneratedKind.algorithm,
     'comparison' => GeneratedKind.comparison,
     'table' => GeneratedKind.table,
-    'podcast' || 'podcast_summary' || 'podcastSummary' =>
-      GeneratedKind.podcast,
+    'podcast' || 'podcast_summary' || 'podcastSummary' => GeneratedKind.podcast,
     'infographic' => GeneratedKind.infographic,
     'mind_map' || 'mindMap' || 'mindmap' => GeneratedKind.mindMap,
     'summary' ||

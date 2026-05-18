@@ -218,6 +218,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
       if (jobId.isEmpty) {
         throw StateError('AI üretim işi başlatılamadı.');
       }
+      await _api.processGenerationJob(jobId);
       final content = await _pollLabContent(jobId);
       if (!mounted) return;
       setState(() {

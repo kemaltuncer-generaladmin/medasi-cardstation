@@ -2,8 +2,8 @@
 
 import 'dart:async';
 import 'dart:html' as html;
-import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 
 import 'drive_upload_payload.dart';
@@ -12,65 +12,32 @@ class DriveUploadService {
   const DriveUploadService();
 
   Future<PickedDriveFile?> pickFile() async {
-    final input = html.FileUploadInputElement()
-      ..accept = '.pdf,.ppt,.pptx,.doc,.docx,.zip,application/pdf'
-      ..multiple = false
-      ..style.display = 'none';
-    html.document.body?.children.add(input);
-    final picked = Completer<PickedDriveFile?>();
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: true,
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'doc', 'docx', 'ppt', 'pptx'],
+    );
+    if (result == null || result.files.isEmpty) return null;
 
-    void cleanup() {
-      input.remove();
+    final selected = result.files.first;
+    final fileName = selected.name.trim();
+    final bytes = selected.bytes;
+    final sizeBytes = selected.size;
+    if (fileName.isEmpty || bytes == null || bytes.isEmpty) {
+      final safeName = fileName.isEmpty ? '<unknown>' : fileName;
+      throw StateError(
+        'Dosya okunamadı veya boş görünüyor. '
+        'name=$safeName size=$sizeBytes bytes=${bytes?.length ?? 0}',
+      );
     }
 
-    html.window.onFocus.first.then((_) {
-      Timer(const Duration(seconds: 8), () {
-        if (!picked.isCompleted && (input.files?.isEmpty ?? true)) {
-          picked.complete(null);
-          cleanup();
-        }
-      });
-    });
-    input.onChange.first.then((_) async {
-      final file = input.files?.isNotEmpty == true ? input.files!.first : null;
-      if (file == null) {
-        if (!picked.isCompleted) picked.complete(null);
-        cleanup();
-        return;
-      }
-      final reader = html.FileReader();
-      reader.readAsArrayBuffer(file);
-      await Future.any([reader.onLoad.first, reader.onError.first]);
-      if (reader.error != null) {
-        if (!picked.isCompleted) {
-          picked.completeError(StateError('Dosya okunamadı.'));
-        }
-        cleanup();
-        return;
-      }
-      final result = reader.result;
-      final bytes = switch (result) {
-        ByteBuffer buffer => Uint8List.view(buffer),
-        Uint8List data => data,
-        List<int> data => Uint8List.fromList(data),
-        _ => Uint8List.fromList(const []),
-      };
-      if (!picked.isCompleted) {
-        picked.complete(
-          PickedDriveFile(
-            name: file.name,
-            contentType: file.type.isNotEmpty
-                ? file.type
-                : _fallbackContentType(file.name),
-            sizeBytes: file.size,
-            bytes: bytes,
-          ),
-        );
-      }
-      cleanup();
-    });
-    input.click();
-    return picked.future;
+    return PickedDriveFile(
+      name: fileName,
+      contentType: _fallbackContentType(fileName),
+      sizeBytes: sizeBytes,
+      bytes: Uint8List.fromList(bytes),
+    );
   }
 
   Future<void> uploadBytes({

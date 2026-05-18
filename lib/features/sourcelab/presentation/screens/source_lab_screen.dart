@@ -93,18 +93,11 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
   String examQuality = 'Standart';
   final Set<String> examOutputFormats = {'Madde madde', 'Mini tablo'};
 
-  String mapKind = 'Konu Bazlı';
-  String mapDepth = 'Orta';
-  String mapLook = 'Renkli';
+  String mapKind = 'Konu Haritası';
+  String mapDepth = '3 seviye';
+  String mapLook = 'Kartlı harita';
+  String mapQuality = 'Standart';
   bool expandChildren = true;
-  final Set<String> mapTopics = {
-    'Patofizyoloji',
-    'Klinik',
-    'Tanı',
-    'Tedavi',
-    'Komplikasyonlar',
-    'İlaçlar',
-  };
 
   void _open(SourceLabView next) {
     setState(() => view = next);
@@ -175,6 +168,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
         qualityTier: switch (tool) {
           _ToolKind.examMorning => _examQualityValue(examQuality),
           _ToolKind.infographic => _infographicQualityValue(infographicQuality),
+          _ToolKind.mindMap => _mindMapQualityValue(mapQuality),
           _ToolKind.clinical => _sourceLabQualityValue(clinicalBranch),
           _ToolKind.plan => _sourceLabQualityValue(planQuality),
           _ => null,
@@ -192,6 +186,13 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
             style: infographicStyle,
             density: infographicDensity,
             quality: infographicQuality,
+            source: selectedSources.first,
+          ),
+          _ToolKind.mindMap => _mindMapPayloadOptions(
+            mapType: mapKind,
+            depth: mapDepth,
+            viewMode: mapLook,
+            quality: mapQuality,
             source: selectedSources.first,
           ),
           _ToolKind.clinical => _clinicalPayloadOptions(
@@ -251,6 +252,10 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
           infographicQuality: tool == _ToolKind.infographic
               ? infographicQuality
               : null,
+          mindMapType: tool == _ToolKind.mindMap ? mapKind : null,
+          mindMapDepth: tool == _ToolKind.mindMap ? mapDepth : null,
+          mindMapViewMode: tool == _ToolKind.mindMap ? mapLook : null,
+          mindMapQuality: tool == _ToolKind.mindMap ? mapQuality : null,
           content: content,
         );
       });
@@ -379,7 +384,10 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
 
   void _showSourcePicker() {
     final pool = _sourcePool(widget.data);
-    final selectedIds = selectedSources.map((source) => source.id).toSet();
+    final selectedIds = selectedSources
+        .where((source) => source.isSelectable)
+        .map((source) => source.id)
+        .toSet();
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -470,6 +478,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                                 selectedSources = pool
                                     .where(
                                       (source) =>
+                                          source.isSelectable &&
                                           selectedIds.contains(source.id),
                                     )
                                     .toList();
@@ -708,7 +717,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                 mapKind: mapKind,
                 depth: mapDepth,
                 look: mapLook,
-                topics: mapTopics,
+                quality: mapQuality,
                 expandChildren: expandChildren,
                 onBack: _back,
                 onSearch: widget.onSearch,
@@ -717,18 +726,7 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                 onMapKind: (value) => setState(() => mapKind = value),
                 onDepth: (value) => setState(() => mapDepth = value),
                 onLook: (value) => setState(() => mapLook = value),
-                onToggleTopic: (topic) {
-                  setState(() {
-                    if (mapTopics.contains(topic)) {
-                      if (mapTopics.length == 1) {
-                        return;
-                      }
-                      mapTopics.remove(topic);
-                    } else {
-                      mapTopics.add(topic);
-                    }
-                  });
-                },
+                onQuality: (value) => setState(() => mapQuality = value),
                 onExpandChildren: (value) =>
                     setState(() => expandChildren = value),
                 onGenerate: () =>
@@ -795,6 +793,10 @@ class _LabGenerationResult {
     this.infographicStyle,
     this.infographicDensity,
     this.infographicQuality,
+    this.mindMapType,
+    this.mindMapDepth,
+    this.mindMapViewMode,
+    this.mindMapQuality,
   });
 
   final _ToolKind tool;
@@ -813,6 +815,10 @@ class _LabGenerationResult {
   final String? infographicStyle;
   final String? infographicDensity;
   final String? infographicQuality;
+  final String? mindMapType;
+  final String? mindMapDepth;
+  final String? mindMapViewMode;
+  final String? mindMapQuality;
 }
 
 List<_LabSource> _sourcePool(DriveWorkspaceData data) {
@@ -889,6 +895,31 @@ Map<String, dynamic> _infographicPayloadOptions({
     'premium': qualityValue == 'premium',
     'short': densityValue == 'short',
     'complex': densityValue == 'detailed',
+    'source_size_tier': _sourceSizeTierFromLabel(source.size),
+  };
+}
+
+Map<String, dynamic> _mindMapPayloadOptions({
+  required String mapType,
+  required String depth,
+  required String viewMode,
+  required String quality,
+  required _LabSource source,
+}) {
+  final typeValue = _mindMapTypeValue(mapType);
+  final depthValue = _mindMapDepthValue(depth);
+  final viewValue = _mindMapViewModeValue(viewMode);
+  final qualityValue = _mindMapQualityValue(quality);
+  return {
+    'map_type': typeValue,
+    'depth': depthValue,
+    'view_mode': viewValue,
+    'quality_tier': qualityValue,
+    'mode': 'structured',
+    'clinical':
+        typeValue == 'clinical_approach' || typeValue == 'diagnosis_treatment',
+    'premium': qualityValue == 'premium',
+    'complex': depthValue == 'detailed' || depthValue == 'exam_focused',
     'source_size_tier': _sourceSizeTierFromLabel(source.size),
   };
 }
@@ -1110,6 +1141,7 @@ String _infographicTypeValue(String value) {
     'Karşılaştırma Panosu' => 'comparison_board',
     'Tanı-Tedavi Algoritması' => 'diagnosis_treatment_algorithm',
     'Temel Bilim Mekanizması' => 'basic_science_mechanism',
+    'TUS Yüksek Verim Posteri' => 'tus_high_yield_poster',
     _ => 'clinical_flow',
   };
 }
@@ -1120,6 +1152,9 @@ String _infographicStyleValue(String value) {
     'Klinik' => 'clinical',
     'Minimal' => 'minimal',
     'Poster' => 'poster',
+    'Premium' => 'premium',
+    'Açık tema' => 'light_theme',
+    'Koyu tema' => 'dark_theme',
     _ => 'academic',
   };
 }
@@ -1134,6 +1169,44 @@ String _infographicDensityValue(String value) {
 }
 
 String _infographicQualityValue(String value) {
+  return switch (value) {
+    'Ekonomik' => 'economy',
+    'Premium' => 'premium',
+    _ => 'standard',
+  };
+}
+
+String _mindMapTypeValue(String value) {
+  return switch (value) {
+    'Klinik Yaklaşım Haritası' => 'clinical_approach',
+    'Mekanizma Haritası' => 'mechanism',
+    'Temel Bilim Haritası' => 'basic_science',
+    'Tanı-Tedavi Haritası' => 'diagnosis_treatment',
+    'Sınav Tekrar Haritası' => 'exam_review',
+    _ => 'topic_map',
+  };
+}
+
+String _mindMapDepthValue(String value) {
+  return switch (value) {
+    '2 seviye' => '2_levels',
+    'Detaylı' => 'detailed',
+    'Sınav odaklı' => 'exam_focused',
+    _ => '3_levels',
+  };
+}
+
+String _mindMapViewModeValue(String value) {
+  return switch (value) {
+    'Merkezden dallanan' => 'radial',
+    'Hiyerarşik ağaç' => 'tree',
+    'Mobil kompakt' => 'mobile_compact',
+    'Geniş ekran' => 'wide',
+    _ => 'card_map',
+  };
+}
+
+String _mindMapQualityValue(String value) {
   return switch (value) {
     'Ekonomik' => 'economy',
     'Premium' => 'premium',
@@ -1163,7 +1236,7 @@ String? _sourceLabJobType(_ToolKind tool) {
     _ToolKind.infographic => 'infographic',
     _ToolKind.clinical => 'clinical_scenario',
     _ToolKind.plan => 'learning_plan',
-    _ToolKind.mindMap => null,
+    _ToolKind.mindMap => 'mind_map',
   };
 }
 
@@ -1174,7 +1247,7 @@ String? _sourceLabGeneratedKind(_ToolKind tool) {
     _ToolKind.infographic => GeneratedKind.infographic.name,
     _ToolKind.clinical => 'clinical_scenario',
     _ToolKind.plan => 'learning_plan',
-    _ToolKind.mindMap => null,
+    _ToolKind.mindMap => GeneratedKind.mindMap.name,
   };
 }
 
@@ -1301,10 +1374,20 @@ String _friendlyLabError(Object error, {_ToolKind? tool}) {
         : 'Öğrenme Planı';
     return '$label şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
   }
-  if (text.contains('IMAGE_PROVIDER_NOT_CONFIGURED')) {
+  if (tool == _ToolKind.mindMap &&
+      (text.contains('VERTEX_AUTH_FAILED') ||
+          text.contains('VERTEX_NOT_CONFIGURED') ||
+          text.contains('JOB_CREATE_FAILED') ||
+          text.contains('AI_FAILED') ||
+          text.contains('UPSTREAM') ||
+          text.contains('CONFIG_ERROR'))) {
+    return 'Zihin haritası şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
+  }
+  if (tool == _ToolKind.infographic &&
+      text.contains('IMAGE_PROVIDER_NOT_CONFIGURED')) {
     return 'İnfografik üretimi şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
   }
-  if (text.contains('JOB_CREATE_FAILED')) {
+  if (tool == _ToolKind.infographic && text.contains('JOB_CREATE_FAILED')) {
     return 'İnfografik üretim işi şu anda başlatılamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
   }
   if (text.contains('VERTEX_AUTH_FAILED') ||
@@ -2913,6 +2996,96 @@ class _InfographicHero extends StatelessWidget {
   }
 }
 
+class _MindMapHero extends StatelessWidget {
+  const _MindMapHero({
+    required this.selectedCount,
+    required this.hasSources,
+    required this.onPickSources,
+  });
+
+  final int selectedCount;
+  final bool hasSources;
+  final VoidCallback onPickSources;
+
+  @override
+  Widget build(BuildContext context) {
+    return _LabPanel(
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+      radius: 18,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 620;
+          final copy = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Zihin Haritası',
+                style: TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 34,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Kaynağındaki kavramları merkez-dal-alt dal ilişkisiyle öğrenilebilir haritaya dönüştür.',
+                style: TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 16,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _MiniHeroChip(
+                    icon: Icons.source_outlined,
+                    label: '$selectedCount kaynak seçili',
+                  ),
+                  const _MiniHeroChip(
+                    icon: Icons.hub_outlined,
+                    label: 'Merkez-dal yapı',
+                  ),
+                  const _MiniHeroChip(
+                    icon: Icons.medical_information_outlined,
+                    label: 'Klinik/TUS ipucu',
+                  ),
+                ],
+              ),
+            ],
+          );
+          final cta = _SmallActionButton(
+            label: hasSources ? 'Kaynakları yönet' : 'Drive’dan kaynak seç',
+            icon: Icons.folder_open_rounded,
+            onTap: onPickSources,
+          );
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                copy,
+                const SizedBox(height: 16),
+                Align(alignment: Alignment.centerLeft, child: cta),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: copy),
+              const SizedBox(width: 20),
+              SizedBox(width: 210, child: cta),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _InfographicOptionGrid extends StatelessWidget {
   const _InfographicOptionGrid({
     required this.values,
@@ -3805,6 +3978,7 @@ class _InfographicBuilder extends StatelessWidget {
               'Karşılaştırma Panosu',
               'Tanı-Tedavi Algoritması',
               'Temel Bilim Mekanizması',
+              'TUS Yüksek Verim Posteri',
             ],
             selected: type,
             onSelected: onType,
@@ -3819,7 +3993,15 @@ class _InfographicBuilder extends StatelessWidget {
                 icon: Icons.palette_outlined,
                 label: 'Görsel Stil',
                 child: _SegmentedOptions(
-                  values: const ['Akademik', 'Klinik', 'Minimal', 'Poster'],
+                  values: const [
+                    'Akademik',
+                    'Klinik',
+                    'Minimal',
+                    'Poster',
+                    'Premium',
+                    'Açık tema',
+                    'Koyu tema',
+                  ],
                   selected: style,
                   onSelected: onStyle,
                 ),
@@ -3853,8 +4035,8 @@ class _InfographicBuilder extends StatelessWidget {
               ),
               _LabNotice(
                 text: quality == 'Premium'
-                    ? 'Premium kalite daha yüksek görsel kalite hedefler ve standart üretime göre daha fazla MC tüketebilir. Kesin ücret backend tarafından üretim sırasında hesaplanır.'
-                    : 'Ücret üretim sırasında güvenli şekilde backend tarafından hesaplanır.',
+                    ? 'Premium kalite daha yüksek görsel kalite hedefler ve standart üretime göre daha fazla MC tüketebilir. MC tutarı üretim sırasında güvenli şekilde hesaplanır.'
+                    : 'MC tutarı üretim sırasında güvenli şekilde hesaplanır.',
               ),
             ],
           ),
@@ -4004,7 +4186,7 @@ class _MindMapBuilder extends StatelessWidget {
     required this.mapKind,
     required this.depth,
     required this.look,
-    required this.topics,
+    required this.quality,
     required this.expandChildren,
     required this.onBack,
     required this.onSearch,
@@ -4013,7 +4195,7 @@ class _MindMapBuilder extends StatelessWidget {
     required this.onMapKind,
     required this.onDepth,
     required this.onLook,
-    required this.onToggleTopic,
+    required this.onQuality,
     required this.onExpandChildren,
     required this.onGenerate,
   });
@@ -4022,7 +4204,7 @@ class _MindMapBuilder extends StatelessWidget {
   final String mapKind;
   final String depth;
   final String look;
-  final Set<String> topics;
+  final String quality;
   final bool expandChildren;
   final VoidCallback onBack;
   final VoidCallback onSearch;
@@ -4031,80 +4213,121 @@ class _MindMapBuilder extends StatelessWidget {
   final ValueChanged<String> onMapKind;
   final ValueChanged<String> onDepth;
   final ValueChanged<String> onLook;
-  final ValueChanged<String> onToggleTopic;
+  final ValueChanged<String> onQuality;
   final ValueChanged<bool> onExpandChildren;
   final VoidCallback onGenerate;
 
   @override
   Widget build(BuildContext context) {
+    final hasSources = selectedSources.isNotEmpty;
+    final blockedReasons = selectedSources
+        .where((source) => source.disabledReason != null)
+        .map((source) => source.disabledReason!)
+        .toSet()
+        .toList();
+    final canGenerate = hasSources && blockedReasons.isEmpty;
     return _LabScroll(
       children: [
         _LabTopBar(onBack: onBack, onSearch: onSearch, showMore: true),
-        _LabHero(
-          title: 'Zihin Haritası',
-          subtitle:
-              'Kavramları düğümler halinde gör,\nilişkileri keşfet ve öğrenmeyi\norganize et.',
-          art: _HeroArtKind.mindMap,
-          tight: true,
+        _MindMapHero(
+          selectedCount: selectedSources.length,
+          hasSources: hasSources,
+          onPickSources: onPickSources,
         ),
         _StepPanel(
           number: 1,
-          title: 'Seçili Kaynaklar',
+          title: 'Kaynak Seçimi',
+          trailing: _SmallActionButton(
+            label: hasSources ? 'Kaynak Değiştir' : 'Drive’dan kaynak seç',
+            icon: Icons.folder_open_rounded,
+            onTap: onPickSources,
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SourceGrid(
-                sources: selectedSources,
-                allowRemove: true,
-                onRemove: onRemoveSource,
-                onMenu: onPickSources,
-              ),
-              const SizedBox(height: 14),
-              _DashedAddRow(
-                label: 'Drive’dan daha fazla kaynak ekle',
-                onTap: onPickSources,
-              ),
+              if (!hasSources)
+                const _LabEmptyState(
+                  icon: Icons.folder_open_outlined,
+                  title: 'Kaynak seçilmedi',
+                  message:
+                      'Hazır ve boyutu 0 KB olmayan bir Drive kaynağı seçerek zihin haritası üretimini başlatın.',
+                )
+              else
+                _SourceGrid(
+                  sources: selectedSources,
+                  allowRemove: true,
+                  onRemove: onRemoveSource,
+                  onMenu: onPickSources,
+                ),
+              if (hasSources) ...[
+                const SizedBox(height: 14),
+                _DashedAddRow(
+                  label: 'Drive’dan kaynak seç',
+                  onTap: onPickSources,
+                ),
+              ],
+              for (final reason in blockedReasons) ...[
+                const SizedBox(height: 12),
+                _LabNotice(text: reason),
+              ],
             ],
           ),
         ),
         _StepPanel(
           number: 2,
-          title: 'Harita Ayarları',
+          title: 'Harita Tipi',
+          child: _InfographicOptionGrid(
+            values: const [
+              'Konu Haritası',
+              'Klinik Yaklaşım Haritası',
+              'Mekanizma Haritası',
+              'Temel Bilim Haritası',
+              'Tanı-Tedavi Haritası',
+              'Sınav Tekrar Haritası',
+            ],
+            selected: mapKind,
+            onSelected: onMapKind,
+          ),
+        ),
+        _StepPanel(
+          number: 3,
+          title: 'Derinlik ve Görünüm',
           child: Column(
             children: [
               _SettingRow(
-                label: 'Harita Türü',
-                helper: true,
-                child: _SegmentedOptions(
-                  values: const ['Genel', 'Tanı Ağacı', 'Konu Bazlı'],
-                  selected: mapKind,
-                  onSelected: onMapKind,
-                ),
-              ),
-              _SettingRow(
+                icon: Icons.account_tree_outlined,
                 label: 'Derinlik',
                 helper: true,
                 child: _SegmentedOptions(
-                  values: const ['Temel', 'Orta', 'Derin'],
+                  values: const [
+                    '2 seviye',
+                    '3 seviye',
+                    'Detaylı',
+                    'Sınav odaklı',
+                  ],
                   selected: depth,
                   onSelected: onDepth,
                 ),
               ),
               _SettingRow(
+                icon: Icons.view_quilt_outlined,
                 label: 'Görünüm',
-                helper: true,
-                child: _SegmentedOptions(
-                  values: const ['Renkli', 'Sade'],
+                child: _InfographicOptionGrid(
+                  values: const [
+                    'Merkezden dallanan',
+                    'Hiyerarşik ağaç',
+                    'Kartlı harita',
+                    'Mobil kompakt',
+                    'Geniş ekran',
+                  ],
                   selected: look,
                   onSelected: onLook,
                 ),
               ),
-              _SettingRow(
-                label: 'Merkez Konu',
-                helper: true,
-                child: const _InputLike(text: 'Konu başlığı girin'),
-              ),
               _SwitchSetting(
-                title: 'Alt Düğümleri Açık Başlat',
+                icon: Icons.unfold_more_rounded,
+                title: 'Alt dalları açık başlat',
+                subtitle: 'Mobilde kartlı hiyerarşi korunur.',
                 value: expandChildren,
                 onChanged: onExpandChildren,
               ),
@@ -4112,28 +4335,39 @@ class _MindMapBuilder extends StatelessWidget {
           ),
         ),
         _StepPanel(
-          number: 3,
-          title: 'Dahil Edilecek Başlıklar',
-          child: _TopicWrap(
-            labels: topics.toList(),
-            selected: topics,
-            onTap: onToggleTopic,
+          number: 4,
+          title: 'Kalite ve MC',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SegmentedOptions(
+                values: const ['Ekonomik', 'Standart', 'Premium'],
+                selected: quality,
+                onSelected: onQuality,
+              ),
+              const SizedBox(height: 12),
+              _LabNotice(
+                text: quality == 'Premium'
+                    ? 'Premium kalite daha derin ilişki çıkarımı hedefler ve daha yüksek MC tüketebilir. MC tutarı üretim sırasında güvenli şekilde hesaplanır.'
+                    : 'MC tutarı üretim sırasında güvenli şekilde hesaplanır.',
+              ),
+            ],
           ),
         ),
         _StepPanel(
-          number: 4,
+          number: 5,
           title: 'Önizleme',
-          trailing: IconButton(
-            onPressed: () =>
-                _showLabSnack(context, 'Harita önizlemesi genişletildi.'),
-            icon: const Icon(Icons.open_in_full_rounded),
-          ),
           child: const SizedBox(height: 260, child: _MindMapPreview()),
         ),
         _PrimaryLabButton(
-          label: 'Haritayı Oluştur',
+          label: 'Zihin haritası üret',
           icon: Icons.auto_awesome_rounded,
-          onTap: onGenerate,
+          onTap: canGenerate ? onGenerate : null,
+          subtitle: canGenerate
+              ? null
+              : hasSources
+              ? 'Hazır olmayan kaynak var'
+              : 'Önce kaynak seç',
           height: 76,
         ),
       ],
@@ -4163,9 +4397,7 @@ class _MindMapResult extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading || result != null || error != null) {
-      return _SourceLabGeneratedResult(
-        title: 'Zihin Haritası',
-        tool: _ToolKind.mindMap,
+      return _MindMapGeneratedResult(
         loading: loading,
         result: result,
         error: error,
@@ -4212,6 +4444,361 @@ class _MindMapResult extends StatelessWidget {
           height: 74,
         ),
       ],
+    );
+  }
+}
+
+class _MindMapGeneratedResult extends StatelessWidget {
+  const _MindMapGeneratedResult({
+    required this.loading,
+    required this.result,
+    required this.error,
+    required this.onBack,
+    required this.onSave,
+    required this.onExport,
+    required this.onRegenerate,
+  });
+
+  final bool loading;
+  final _LabGenerationResult? result;
+  final String? error;
+  final VoidCallback onBack;
+  final VoidCallback onSave;
+  final VoidCallback onExport;
+  final VoidCallback onRegenerate;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = result;
+    return _LabScroll(
+      children: [
+        _MinimalTopBar(
+          title: 'Zihin Haritası',
+          subtitle: loading
+              ? 'Kavram haritası üretim kuyruğu işleniyor.'
+              : value == null
+              ? 'Zihin haritası tamamlanamadı.'
+              : '${value.sourceTitle} kaynağından hiyerarşik harita.',
+          onBack: onBack,
+        ),
+        _LabPanel(
+          child: loading
+              ? const _MindMapLoadingState()
+              : error != null
+              ? _LabEmptyState(
+                  icon: Icons.error_outline_rounded,
+                  title: 'Zihin haritası tamamlanamadı',
+                  message: error!,
+                )
+              : value == null
+              ? const _LabEmptyState(
+                  icon: Icons.warning_amber_rounded,
+                  title: 'Boş sonuç',
+                  message:
+                      'Backend tamamlandı ancak gösterilecek zihin haritası dönmedi.',
+                )
+              : _MindMapResultBody(result: value),
+        ),
+        if (value != null && error == null && !loading)
+          _ResponsiveActions(
+            children: [
+              _SecondaryLabButton(
+                label: 'Koleksiyona ekle',
+                icon: Icons.bookmark_border_rounded,
+                onTap: onSave,
+              ),
+              _SecondaryLabButton(
+                label: 'Yeniden üret',
+                icon: Icons.refresh_rounded,
+                onTap: onRegenerate,
+              ),
+              _SecondaryLabButton(
+                label: 'Kopyala/Paylaş',
+                icon: Icons.ios_share_rounded,
+                onTap: onExport,
+              ),
+              _SecondaryLabButton(
+                label: 'Kaynağa dön',
+                icon: Icons.folder_open_rounded,
+                onTap: onBack,
+              ),
+            ],
+          )
+        else if (!loading)
+          _PrimaryLabButton(
+            label: 'Yeniden üret',
+            icon: Icons.refresh_rounded,
+            onTap: onRegenerate,
+          ),
+      ],
+    );
+  }
+}
+
+class _MindMapLoadingState extends StatelessWidget {
+  const _MindMapLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    const stages = [
+      'Kaynak analiz ediliyor',
+      'Ana kavramlar çıkarılıyor',
+      'Bağlantılar kuruluyor',
+      'Harita yapısı hazırlanıyor',
+      'Zihin haritası oluşturuluyor',
+    ];
+    return _LabLoadingState(steps: stages);
+  }
+}
+
+class _MindMapResultBody extends StatelessWidget {
+  const _MindMapResultBody({required this.result});
+
+  final _LabGenerationResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final map = _mindMapFromContent(result.content);
+    if (map == null) {
+      return const _LabEmptyState(
+        icon: Icons.account_tree_outlined,
+        title: 'Harita yapısı bulunamadı',
+        message:
+            'Backend tamamlandı ancak merkez konu ve dallar ayrıştırılamadı.',
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _GeneratedTitleBlock(
+          icon: Icons.hub_outlined,
+          title: map.title,
+          subtitle: '${result.sourceTitle} kaynağından yapılandırıldı.',
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _TagPill(label: 'Kaynak: ${result.sourceTitle}'),
+            _TagPill(label: result.createdAtLabel),
+            _TagPill(label: result.mindMapType ?? 'Konu Haritası'),
+            _TagPill(label: result.mindMapDepth ?? '3 seviye'),
+            _TagPill(label: result.mindMapViewMode ?? 'Kartlı harita'),
+            _TagPill(label: result.mindMapQuality ?? 'Standart'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _LabNotice(text: result.mcCostLabel),
+        const SizedBox(height: 16),
+        _MindMapHierarchy(data: map),
+      ],
+    );
+  }
+}
+
+class _MindMapHierarchy extends StatelessWidget {
+  const _MindMapHierarchy({required this.data});
+
+  final _MindMapData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 640;
+        final branchCards = [
+          for (var i = 0; i < data.branches.length; i++)
+            SizedBox(
+              width: compact ? double.infinity : 260,
+              child: _MindMapBranchCard(branch: data.branches[i], index: i),
+            ),
+        ];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _MindMapCentralCard(label: data.centralTopic),
+            const SizedBox(height: 14),
+            if (compact)
+              Column(
+                children: [
+                  for (var i = 0; i < branchCards.length; i++) ...[
+                    branchCards[i],
+                    if (i != branchCards.length - 1) const SizedBox(height: 12),
+                  ],
+                ],
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < branchCards.length; i++) ...[
+                      branchCards[i],
+                      if (i != branchCards.length - 1)
+                        const SizedBox(width: 12),
+                    ],
+                  ],
+                ),
+              ),
+            if (data.links.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _GeneratedSectionCard(
+                icon: Icons.link_rounded,
+                title: 'Kritik Bağlantılar',
+                child: _GeneratedBulletList(values: data.links),
+              ),
+            ],
+            if (data.tips.isNotEmpty)
+              _GeneratedSectionCard(
+                icon: Icons.lightbulb_outline_rounded,
+                title: 'Klinik/TUS İpuçları',
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final tip in data.tips)
+                      _TagPill(
+                        label: tip.length > 42
+                            ? '${tip.substring(0, 42)}...'
+                            : tip,
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MindMapCentralCard extends StatelessWidget {
+  const _MindMapCentralCard({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF5FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.blue.withValues(alpha: .35)),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 22,
+            backgroundColor: Colors.white,
+            child: Icon(Icons.radio_button_checked, color: AppColors.blue),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.navy,
+                fontSize: 20,
+                height: 1.15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MindMapBranchCard extends StatelessWidget {
+  const _MindMapBranchCard({required this.branch, required this.index});
+
+  final _MindMapBranch branch;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = [
+      AppColors.blue,
+      AppColors.green,
+      AppColors.purple,
+      AppColors.orange,
+      AppColors.red,
+    ][index % 5];
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: .28)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: .08),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 15,
+                backgroundColor: color.withValues(alpha: .12),
+                child: Text(
+                  '${index + 1}',
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  branch.label,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 16,
+                    height: 1.15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (branch.tags.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [for (final tag in branch.tags) _TagPill(label: tag)],
+            ),
+          ],
+          const SizedBox(height: 12),
+          if (branch.children.isEmpty)
+            const _GeneratedText('Alt dal bilgisi dönmedi.')
+          else
+            for (final child in branch.children)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 7),
+                      child: Icon(Icons.circle, size: 6, color: color),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(child: _GeneratedText(child)),
+                  ],
+                ),
+              ),
+        ],
+      ),
     );
   }
 }
@@ -4505,6 +5092,34 @@ class _InfographicImage {
   final String label;
 }
 
+class _MindMapData {
+  const _MindMapData({
+    required this.title,
+    required this.centralTopic,
+    required this.branches,
+    required this.links,
+    required this.tips,
+  });
+
+  final String title;
+  final String centralTopic;
+  final List<_MindMapBranch> branches;
+  final List<String> links;
+  final List<String> tips;
+}
+
+class _MindMapBranch {
+  const _MindMapBranch({
+    required this.label,
+    required this.children,
+    required this.tags,
+  });
+
+  final String label;
+  final List<String> children;
+  final List<String> tags;
+}
+
 _InfographicImage? _infographicImageFromContent(Object? content) {
   if (content is! Map) return null;
   final image = content['image'];
@@ -4545,6 +5160,246 @@ _InfographicImage? _infographicImageFromContent(Object? content) {
 String _infographicTitle(Object? content) {
   if (content is! Map) return '';
   return content['title']?.toString().trim() ?? '';
+}
+
+_MindMapData? _mindMapFromContent(Object? content) {
+  final value = _decodeStructuredContent(content);
+  if (value is Map) return _mindMapFromMap(value);
+  if (value is List) {
+    final branches = _mindMapBranchesFrom(value);
+    if (branches.isEmpty) return null;
+    return _MindMapData(
+      title: 'Zihin Haritası',
+      centralTopic: branches.first.label,
+      branches: branches,
+      links: const [],
+      tips: const [],
+    );
+  }
+  if (content is String) return _mindMapFromMarkdown(content);
+  return null;
+}
+
+Object? _decodeStructuredContent(Object? content) {
+  if (content is! String) return content;
+  final text = content.trim();
+  if (text.isEmpty) return null;
+  final jsonMatch =
+      RegExp(
+        r'```json\s*([\s\S]*?)\s*```',
+        caseSensitive: false,
+      ).firstMatch(text) ??
+      RegExp(r'```\s*([\s\S]*?)\s*```').firstMatch(text);
+  final candidate = jsonMatch?.group(1)?.trim() ?? text;
+  final firstObject = candidate.indexOf('{');
+  final firstArray = candidate.indexOf('[');
+  final starts = [
+    firstObject,
+    firstArray,
+  ].where((index) => index >= 0).toList();
+  if (starts.isEmpty) return content;
+  final start = starts.reduce(math.min);
+  final end = math.max(candidate.lastIndexOf('}'), candidate.lastIndexOf(']'));
+  if (end <= start) return content;
+  try {
+    return jsonDecode(candidate.substring(start, end + 1));
+  } catch (_) {
+    return content;
+  }
+}
+
+_MindMapData? _mindMapFromMap(Map<dynamic, dynamic> map) {
+  final title =
+      _labTextFor(map, const ['title', 'mapTitle', 'map_title', 'baslik']) ??
+      'Zihin Haritası';
+  final centralTopic =
+      _labTextFor(map, const [
+        'centralTopic',
+        'central_topic',
+        'center',
+        'root',
+        'topic',
+        'merkez',
+      ]) ??
+      title;
+  final branchSource = _labValueFor(map, const [
+    'branches',
+    'mainBranches',
+    'main_branches',
+    'children',
+    'nodes',
+    'tree',
+  ]);
+  final branches = _mindMapBranchesFrom(branchSource);
+  if (branches.isEmpty) return null;
+  return _MindMapData(
+    title: title,
+    centralTopic: centralTopic,
+    branches: branches,
+    links: _labListFor(
+      _labValueFor(map, const [
+        'criticalConnections',
+        'critical_connections',
+        'connections',
+        'relationships',
+        'edges',
+      ]),
+    ),
+    tips: _labListFor(
+      _labValueFor(map, const [
+        'clinicalTusTips',
+        'clinical_tus_tips',
+        'clinicalTips',
+        'tusTips',
+        'tips',
+        'high_yield',
+      ]),
+    ),
+  );
+}
+
+List<_MindMapBranch> _mindMapBranchesFrom(Object? value) {
+  if (value is Map) {
+    final nested = _labValueFor(value, const [
+      'branches',
+      'children',
+      'nodes',
+      'items',
+    ]);
+    if (nested != null && nested != value) return _mindMapBranchesFrom(nested);
+    return value.entries
+        .map(
+          (entry) => _MindMapBranch(
+            label: _humanizeLabLabel(entry.key.toString()),
+            children: _mindMapChildLabels(entry.value),
+            tags: const [],
+          ),
+        )
+        .where((branch) => branch.label.trim().isNotEmpty)
+        .toList();
+  }
+  if (value is! List) return const [];
+  return value
+      .map(_mindMapBranchFromItem)
+      .whereType<_MindMapBranch>()
+      .where((branch) => branch.label.trim().isNotEmpty)
+      .toList();
+}
+
+_MindMapBranch? _mindMapBranchFromItem(Object? item) {
+  if (item is Map) {
+    final label = _labTextFor(item, const [
+      'label',
+      'title',
+      'name',
+      'topic',
+      'heading',
+      'branch',
+    ]);
+    if (label == null) return null;
+    final childSource = _labValueFor(item, const [
+      'children',
+      'subBranches',
+      'sub_branches',
+      'subtopics',
+      'items',
+      'nodes',
+      'bullets',
+    ]);
+    return _MindMapBranch(
+      label: label,
+      children: _mindMapChildLabels(childSource),
+      tags: _labListFor(_labValueFor(item, const ['tags', 'labels', 'group'])),
+    );
+  }
+  final text = _labText(item);
+  if (text == null || text.isEmpty) return null;
+  return _MindMapBranch(label: text, children: const [], tags: const []);
+}
+
+List<String> _mindMapChildLabels(Object? value) {
+  if (value == null) return const [];
+  if (value is List) {
+    return value
+        .map((item) {
+          if (item is Map) {
+            final label = _labTextFor(item, const [
+              'label',
+              'title',
+              'name',
+              'topic',
+              'heading',
+            ]);
+            final children = _mindMapChildLabels(
+              _labValueFor(item, const [
+                'children',
+                'subBranches',
+                'sub_branches',
+                'subtopics',
+                'items',
+                'nodes',
+              ]),
+            );
+            if (label == null) return children.join(' / ');
+            if (children.isEmpty) return label;
+            return '$label: ${children.join(' / ')}';
+          }
+          return _labText(item) ?? '';
+        })
+        .where((text) => text.trim().isNotEmpty)
+        .toList();
+  }
+  return _labListFor(value);
+}
+
+_MindMapData? _mindMapFromMarkdown(String content) {
+  final lines = content
+      .split('\n')
+      .map((line) => line.trimRight())
+      .where((line) => line.trim().isNotEmpty)
+      .toList();
+  if (lines.isEmpty) return null;
+  final title = lines.first.replaceFirst(RegExp(r'^#+\s*'), '').trim();
+  final branches = <_MindMapBranch>[];
+  String? current;
+  final children = <String>[];
+  void flush() {
+    final label = current?.trim() ?? '';
+    if (label.isEmpty) return;
+    branches.add(
+      _MindMapBranch(
+        label: label,
+        children: List<String>.from(children),
+        tags: const [],
+      ),
+    );
+    children.clear();
+  }
+
+  for (final line in lines.skip(1)) {
+    final trimmed = line.trim();
+    final level = line.length - line.trimLeft().length;
+    final cleaned = trimmed
+        .replaceFirst(RegExp(r'^[-*]\s*'), '')
+        .replaceFirst(RegExp(r'^#+\s*'), '')
+        .trim();
+    if (cleaned.isEmpty) continue;
+    if (trimmed.startsWith('#') || level <= 1) {
+      flush();
+      current = cleaned;
+    } else {
+      children.add(cleaned);
+    }
+  }
+  flush();
+  if (branches.isEmpty) return null;
+  return _MindMapData(
+    title: title.isEmpty ? 'Zihin Haritası' : title,
+    centralTopic: title.isEmpty ? branches.first.label : title,
+    branches: branches,
+    links: const [],
+    tips: const [],
+  );
 }
 
 String _firstText(List<Object?> values) {
@@ -7645,6 +8500,31 @@ class _SegmentedOptions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (values.length > 4) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth > 680 ? 4 : 2;
+          const gap = 8.0;
+          final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              for (var i = 0; i < values.length; i++)
+                SizedBox(
+                  width: width,
+                  child: _SegmentButton(
+                    label: values[i],
+                    icon: icons != null && i < icons!.length ? icons![i] : null,
+                    selected: values[i] == selected,
+                    onTap: () => onSelected(values[i]),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+    }
     return Row(
       children: [
         for (var i = 0; i < values.length; i++) ...[
@@ -7830,39 +8710,6 @@ class _RangeLine extends StatelessWidget {
   }
 }
 
-class _InputLike extends StatelessWidget {
-  const _InputLike({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: AppColors.navy,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const Icon(Icons.close_rounded, color: AppColors.muted, size: 20),
-        ],
-      ),
-    );
-  }
-}
-
 class _FocusChips extends StatelessWidget {
   const _FocusChips({
     required this.labels,
@@ -7934,34 +8781,6 @@ class _FocusChip extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _TopicWrap extends StatelessWidget {
-  const _TopicWrap({
-    required this.labels,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final List<String> labels;
-  final Set<String> selected;
-  final ValueChanged<String> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 14,
-      runSpacing: 12,
-      children: [
-        for (final label in labels)
-          _FocusChip(
-            label: label,
-            selected: selected.contains(label),
-            onTap: () => onTap(label),
-          ),
-      ],
     );
   }
 }

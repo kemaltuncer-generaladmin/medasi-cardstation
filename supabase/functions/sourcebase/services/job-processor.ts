@@ -229,6 +229,9 @@ type JobGenerationOptions = {
   infographicType?: string;
   visualStyle?: string;
   density?: string;
+  mapType?: string;
+  depth?: string;
+  viewMode?: string;
   scenarioType?: string;
   difficulty?: string;
   planGoal?: string;

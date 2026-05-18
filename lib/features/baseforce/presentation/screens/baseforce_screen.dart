@@ -80,6 +80,11 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
   bool algorithmColorfulNodes = true;
   bool algorithmClinicalNotes = true;
 
+  String comparisonType = 'Hastalık Karşılaştırması';
+  String comparisonFormat = 'Ayırt ettiren ipucu tablosu';
+  String comparisonDetail = 'Dengeli';
+  String comparisonQuality = 'Standart';
+
   String queueFilter = 'Tümü';
 
   void _open(BaseForceView next) {
@@ -300,6 +305,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
     if (kind == GeneratedKind.algorithm) {
       return _algorithmQualityValue(algorithmQuality);
     }
+    if (kind == GeneratedKind.comparison || kind == GeneratedKind.table) {
+      return _comparisonQualityValue(comparisonQuality);
+    }
     final difficulty = switch (kind) {
       GeneratedKind.flashcard => flashcardDifficulty,
       GeneratedKind.question => selectedQuestionDifficulty,
@@ -327,6 +335,20 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         'clinical_notes': algorithmClinicalNotes,
         'colorful_nodes': algorithmColorfulNodes,
         'structured': true,
+      };
+    }
+    if (kind == GeneratedKind.comparison || kind == GeneratedKind.table) {
+      final source = _selectedFile();
+      return {
+        'comparison_type': _comparisonTypeValue(comparisonType),
+        'table_format': _comparisonFormatValue(comparisonFormat),
+        'detail_level': _comparisonDetailValue(comparisonDetail),
+        'quality_tier': _comparisonQualityValue(comparisonQuality),
+        'source_size_tier': source == null
+            ? null
+            : _baseForceSourceSizeTier(source.sizeLabel),
+        'structured': true,
+        'clinical': true,
       };
     }
     if (kind != GeneratedKind.question) return null;
@@ -407,6 +429,22 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         outputFormat: kind == GeneratedKind.algorithm ? algorithmLayout : null,
         detailLevel: kind == GeneratedKind.algorithm ? algorithmDetail : null,
         qualityTier: kind == GeneratedKind.algorithm ? algorithmQuality : null,
+        comparisonType:
+            kind == GeneratedKind.comparison || kind == GeneratedKind.table
+            ? comparisonType
+            : null,
+        tableFormat:
+            kind == GeneratedKind.comparison || kind == GeneratedKind.table
+            ? comparisonFormat
+            : null,
+        comparisonDetail:
+            kind == GeneratedKind.comparison || kind == GeneratedKind.table
+            ? comparisonDetail
+            : null,
+        comparisonQuality:
+            kind == GeneratedKind.comparison || kind == GeneratedKind.table
+            ? comparisonQuality
+            : null,
         content: content,
       );
       var resultSaved = false;
@@ -648,6 +686,14 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
             onSearch: widget.onSearch,
             onBack: _backToHome,
             onPickSources: () => _open(BaseForceView.sourcePicker),
+            comparisonType: comparisonType,
+            tableFormat: comparisonFormat,
+            detailLevel: comparisonDetail,
+            qualityTier: comparisonQuality,
+            onComparisonTypeChanged: (v) => setState(() => comparisonType = v),
+            onTableFormatChanged: (v) => setState(() => comparisonFormat = v),
+            onDetailLevelChanged: (v) => setState(() => comparisonDetail = v),
+            onQualityTierChanged: (v) => setState(() => comparisonQuality = v),
             onGenerate: () => _startGeneration(GeneratedKind.comparison),
             onOpenResult: () => _open(BaseForceView.flashcardResults),
           ),
@@ -764,6 +810,10 @@ class _GenerationResult {
     this.outputFormat,
     this.detailLevel,
     this.qualityTier,
+    this.comparisonType,
+    this.tableFormat,
+    this.comparisonDetail,
+    this.comparisonQuality,
   });
 
   final GeneratedKind kind;
@@ -777,6 +827,10 @@ class _GenerationResult {
   final String? outputFormat;
   final String? detailLevel;
   final String? qualityTier;
+  final String? comparisonType;
+  final String? tableFormat;
+  final String? comparisonDetail;
+  final String? comparisonQuality;
   final Object? content;
 }
 
@@ -953,6 +1007,47 @@ String _algorithmQualityValue(String label) {
   };
 }
 
+String _comparisonTypeValue(String label) {
+  return switch (label) {
+    'İlaç Karşılaştırması' => 'drug_comparison',
+    'Mekanizma Karşılaştırması' => 'mechanism_comparison',
+    'Klinik Bulgu Karşılaştırması' => 'clinical_finding_comparison',
+    'Tanı-Tedavi Karşılaştırması' => 'diagnosis_treatment_comparison',
+    'Temel Bilim Karşılaştırması' => 'basic_science_comparison',
+    'TUS’ta Karıştırılanlar' => 'tus_confusables',
+    _ => 'disease_comparison',
+  };
+}
+
+String _comparisonFormatValue(String label) {
+  return switch (label) {
+    'Sütun bazlı ayrım' => 'column_based',
+    '“Ayırt ettiren ipucu” tablosu' => 'distinguishing_clue_table',
+    'Tanı / Tetkik / Tedavi matrisi' => 'diagnosis_test_treatment_matrix',
+    'Artı-eksi karşılaştırması' => 'plus_minus_comparison',
+    'Mini özet + tablo' => 'mini_summary_plus_table',
+    _ => 'classic_table',
+  };
+}
+
+String _comparisonDetailValue(String label) {
+  return switch (label) {
+    'Kısa' => 'brief',
+    'Detaylı' => 'detailed',
+    'Klinik odaklı' => 'clinical_focused',
+    'Sınav odaklı' => 'exam_focused',
+    _ => 'balanced',
+  };
+}
+
+String _comparisonQualityValue(String label) {
+  return switch (label) {
+    'Ekonomik' => 'economy',
+    'Premium' => 'premium',
+    _ => 'standard',
+  };
+}
+
 String _baseForceSourceSizeTier(String label) {
   final normalized = label.trim().toLowerCase().replaceAll(',', '.');
   final match = RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(normalized);
@@ -1036,8 +1131,12 @@ String _friendlyBaseForceError(Object error, {GeneratedKind? kind}) {
       .replaceFirst('FunctionsException', '')
       .trim();
   final isAlgorithm = kind == GeneratedKind.algorithm;
+  final isComparison =
+      kind == GeneratedKind.comparison || kind == GeneratedKind.table;
   const algorithmFallback =
       'Algoritma şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
+  const comparisonFallback =
+      'Karşılaştırma tablosu şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
   if (text.isEmpty) return 'AI üretimi tamamlanamadı. Lütfen tekrar deneyin.';
   if (text.contains('SourceBase Supabase client is not configured')) {
     return 'Oturum bağlantısı hazır değil. Lütfen tekrar giriş yapın.';
@@ -1055,10 +1154,14 @@ String _friendlyBaseForceError(Object error, {GeneratedKind? kind}) {
       text.contains('JOB_CREATE_FAILED') ||
       text.contains('BACKGROUND_JOB_FAILED')) {
     if (isAlgorithm) return algorithmFallback;
+    if (isComparison) return comparisonFallback;
     return 'AI servisi şu anda yanıt veremiyor. Biraz sonra tekrar deneyin.';
   }
   if (isAlgorithm && text.toLowerCase().contains('ai üretimi başarısız')) {
     return algorithmFallback;
+  }
+  if (isComparison && text.toLowerCase().contains('ai üretimi başarısız')) {
+    return comparisonFallback;
   }
   return text;
 }
@@ -1069,6 +1172,18 @@ String _baseForceProgressLabel(
   double progress,
 ) {
   if (status == _JobUiStatus.pending) return 'Kaynak analiz ediliyor';
+  if (kind == GeneratedKind.comparison || kind == GeneratedKind.table) {
+    if (status == _JobUiStatus.completed) return 'Karşılaştırma hazır';
+    if (status == _JobUiStatus.failed) return 'Karşılaştırma tamamlanamadı';
+    final stage = (progress * 5).floor().clamp(0, 4);
+    return const [
+      'Kaynak analiz ediliyor',
+      'Benzer kavramlar ayrıştırılıyor',
+      'Ayırt ettiren noktalar çıkarılıyor',
+      'Tablo yapısı hazırlanıyor',
+      'Karşılaştırma tamamlanıyor',
+    ][stage];
+  }
   if (kind != GeneratedKind.algorithm) return _jobStatusLabel(status);
   if (status == _JobUiStatus.completed) return 'Algoritma hazır';
   if (status == _JobUiStatus.failed) return 'Algoritma tamamlanamadı';
@@ -2830,6 +2945,14 @@ class _ComparisonFactoryScreen extends StatelessWidget {
     required this.onSearch,
     required this.onBack,
     required this.onPickSources,
+    required this.comparisonType,
+    required this.tableFormat,
+    required this.detailLevel,
+    required this.qualityTier,
+    required this.onComparisonTypeChanged,
+    required this.onTableFormatChanged,
+    required this.onDetailLevelChanged,
+    required this.onQualityTierChanged,
     required this.onGenerate,
     required this.onOpenResult,
   });
@@ -2839,29 +2962,68 @@ class _ComparisonFactoryScreen extends StatelessWidget {
   final VoidCallback onSearch;
   final VoidCallback onBack;
   final VoidCallback onPickSources;
+  final String comparisonType;
+  final String tableFormat;
+  final String detailLevel;
+  final String qualityTier;
+  final ValueChanged<String> onComparisonTypeChanged;
+  final ValueChanged<String> onTableFormatChanged;
+  final ValueChanged<String> onDetailLevelChanged;
+  final ValueChanged<String> onQualityTierChanged;
   final VoidCallback onGenerate;
   final VoidCallback onOpenResult;
 
   @override
   Widget build(BuildContext context) {
     final selectedFiles = data.recentFiles
-        .where((file) => selectedSources.contains(file.id))
+        .where(
+          (file) =>
+              selectedSources.contains(file.id) &&
+              _isBaseForceReadySource(file),
+        )
         .toList();
+    final blockedFiles = data.recentFiles
+        .where(
+          (file) =>
+              selectedSources.contains(file.id) &&
+              !_isBaseForceReadySource(file),
+        )
+        .toList();
+    final canGenerate = selectedFiles.isNotEmpty && blockedFiles.isEmpty;
+    final sourceSummary = canGenerate
+        ? '${selectedFiles.length} kaynak seçildi'
+        : 'Hazır kaynak yok';
     return _BaseForcePage(
       title: 'Kar\u015F\u0131la\u015Ft\u0131rma Tablosu',
       subtitle:
-          'Se\xE7ti\u011Finiz kaynaklar\u0131 ve konular\u0131 kar\u015F\u0131la\u015Ft\u0131r\u0131n, farklar\u0131 net \u015Fekilde g\xF6r\xFCn.',
+          'Kaynağından benzer kavramları, hastalıkları ve mekanizmaları net ayıran tablo üret.',
       onSearch: onSearch,
       onBack: onBack,
       heroTight: true,
+      actions: [
+        _HeroAction(
+          label: sourceSummary,
+          icon: canGenerate
+              ? Icons.check_circle_outline_rounded
+              : Icons.source_outlined,
+          onTap: onPickSources,
+        ),
+        if (!canGenerate)
+          _HeroAction(
+            label: 'Drive’dan kaynak seç',
+            icon: Icons.drive_folder_upload_outlined,
+            cyan: true,
+            onTap: onPickSources,
+          ),
+      ],
       children: [
         _BasePanel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Seçilen Kaynaklar (${selectedFiles.length})',
-                style: _titleStyle,
+              _PanelTitle(
+                icon: Icons.source_outlined,
+                title: 'Kaynak Seçimi (${selectedFiles.length})',
               ),
               const SizedBox(height: 12),
               if (selectedFiles.isEmpty)
@@ -2869,6 +3031,10 @@ class _ComparisonFactoryScreen extends StatelessWidget {
               else
                 for (final file in selectedFiles)
                   _ComparisonSourceLine(source: _bfSourceFromFile(file)),
+              for (final file in blockedFiles) ...[
+                const SizedBox(height: 10),
+                _LabLikeNotice(text: _baseForceSourceBlockedMessage(file)),
+              ],
             ],
           ),
         ),
@@ -2876,60 +3042,73 @@ class _ComparisonFactoryScreen extends StatelessWidget {
         _BasePanel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text('Karşılaştırılacak Konular', style: _titleStyle),
-              SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _TopicButton(label: 'Crohn', selected: true),
-                  _TopicButton(label: 'Ülseratif Kolit', selected: true),
-                  _TopicButton(label: 'STEMI'),
-                  _TopicButton(label: 'NSTEMI'),
-                  _TopicButton(label: 'Kalp Yetmezliği'),
-                  _TopicButton(
-                    label: '',
-                    icon: Icons.keyboard_arrow_down_rounded,
-                  ),
+            children: [
+              const _PanelTitle(
+                icon: Icons.compare_arrows_rounded,
+                title: 'Karşılaştırma Tipi',
+              ),
+              const SizedBox(height: 12),
+              _ComparisonChoiceGrid(
+                values: const [
+                  'Hastalık Karşılaştırması',
+                  'İlaç Karşılaştırması',
+                  'Mekanizma Karşılaştırması',
+                  'Klinik Bulgu Karşılaştırması',
+                  'Tanı-Tedavi Karşılaştırması',
+                  'Temel Bilim Karşılaştırması',
+                  'TUS’ta Karıştırılanlar',
                 ],
+                selected: comparisonType,
+                onSelected: onComparisonTypeChanged,
               ),
             ],
           ),
         ),
         const SizedBox(height: 10),
-        const _TableSettingsPanel(),
+        _TableSettingsPanel(
+          tableFormat: tableFormat,
+          detailLevel: detailLevel,
+          qualityTier: qualityTier,
+          onTableFormatChanged: onTableFormatChanged,
+          onDetailLevelChanged: onDetailLevelChanged,
+          onQualityTierChanged: onQualityTierChanged,
+        ),
         const SizedBox(height: 10),
         const _ComparisonPreviewTable(),
         const SizedBox(height: 18),
-        const _ProductionSummary(
+        _ProductionSummary(
           items: [
             _SummaryItemData(
               Icons.menu_book_outlined,
-              '2',
-              'Konu',
+              '${selectedFiles.length}',
+              'Kaynak',
               AppColors.green,
             ),
             _SummaryItemData(
               Icons.format_list_bulleted_rounded,
-              '6',
-              'Satır',
+              detailLevel,
+              'Yoğunluk',
               AppColors.purple,
             ),
             _SummaryItemData(
               Icons.track_changes_rounded,
-              'Fark Odaklı',
-              'Vurgu Tercihi',
+              qualityTier,
+              'Kalite',
               AppColors.orange,
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        const _LabLikeNotice(
+          text:
+              'MC tutarı üretim sırasında güvenli şekilde hesaplanır. Premium kalite daha yüksek MC tüketebilir.',
+        ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: 'Tabloyu Oluştur',
+          label: 'Karşılaştırma tablosu üret',
           icon: Icons.table_chart_outlined,
           height: 58,
-          onTap: onGenerate,
+          onTap: canGenerate ? onGenerate : null,
         ),
       ],
     );
@@ -3267,6 +3446,10 @@ class _GeneratedContentView extends StatelessWidget {
     if (result.kind == GeneratedKind.algorithm) {
       return _AlgorithmResultView(result: result);
     }
+    if (result.kind == GeneratedKind.comparison ||
+        result.kind == GeneratedKind.table) {
+      return _ComparisonResultView(result: result);
+    }
     if (content is List) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3333,6 +3516,526 @@ List<Object?>? _preferredGeneratedList(Map<dynamic, dynamic> content) {
     if (value is List) return value.cast<Object?>();
   }
   return null;
+}
+
+class _ComparisonResultView extends StatelessWidget {
+  const _ComparisonResultView({required this.result});
+
+  final _GenerationResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final map = _comparisonContentMap(result.content);
+    final table = _comparisonTableFromContent(result.content, map);
+    final title = _comparisonText(map, const ['title', 'baslik'], result.title);
+    final tips = _comparisonList(map, const [
+      'distinguishing_tips',
+      'distinguishingTips',
+      'exam_tips',
+      'examTips',
+      'tips',
+      'ayirt_ettiren_ipuclari',
+    ]);
+    final clinicalNotes = _comparisonList(map, const [
+      'clinical_notes',
+      'clinicalNotes',
+      'tus_notes',
+      'clinical_tus_notes',
+      'notes',
+    ]);
+    final confusions = _comparisonList(map, const [
+      'commonly_confused',
+      'commonlyConfused',
+      'pitfalls',
+      'frequent_confusions',
+      'sik_karistirilanlar',
+    ]);
+    final redFlags = _comparisonList(map, const [
+      'red_flags',
+      'redFlags',
+      'warnings',
+      'critical_warnings',
+    ]);
+    final summary = _comparisonText(map, const [
+      'summary',
+      'short_summary',
+      'conclusion',
+      'take_home',
+    ], '');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppColors.navy,
+            fontSize: 22,
+            height: 1.15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _ComparisonMetaGrid(result: result),
+        const SizedBox(height: 16),
+        if (table.headers.isNotEmpty && table.rows.isNotEmpty)
+          _ComparisonResultTable(table: table)
+        else
+          _ComparisonFallbackText(content: result.content),
+        _ComparisonSection(
+          title: 'Ayırt ettiren ipuçları',
+          icon: Icons.track_changes_rounded,
+          items: tips,
+          color: AppColors.blue,
+        ),
+        _ComparisonSection(
+          title: 'Klinik / TUS notları',
+          icon: Icons.school_outlined,
+          items: clinicalNotes,
+          color: AppColors.purple,
+        ),
+        _ComparisonSection(
+          title: 'Sık karıştırılanlar',
+          icon: Icons.compare_arrows_rounded,
+          items: confusions,
+          color: AppColors.orange,
+        ),
+        _ComparisonSection(
+          title: 'Kırmızı bayraklar',
+          icon: Icons.warning_amber_rounded,
+          items: redFlags,
+          color: AppColors.red,
+        ),
+        if (summary.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          _AlgorithmCallout(
+            icon: Icons.fact_check_outlined,
+            title: 'Kısa sonuç',
+            text: summary,
+            color: AppColors.green,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ComparisonMetaGrid extends StatelessWidget {
+  const _ComparisonMetaGrid({required this.result});
+
+  final _GenerationResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      ('Kaynak', result.sourceTitle),
+      ('Üretim tarihi', result.createdAtLabel ?? 'Bugün'),
+      ('Tip', result.comparisonType ?? 'Hastalık Karşılaştırması'),
+      ('Format', result.tableFormat ?? 'Ayırt ettiren ipucu tablosu'),
+      ('Detay', result.comparisonDetail ?? 'Dengeli'),
+      ('Kalite', result.comparisonQuality ?? 'Standart'),
+      ('MC', result.mcCostLabel ?? 'MC tutarı güvenli hesaplanır'),
+    ];
+    return _ResponsiveGrid(
+      minItemWidth: 155,
+      children: [
+        for (final item in items)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FBFF),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.$1,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  item.$2,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ComparisonResultTable extends StatelessWidget {
+  const _ComparisonResultTable({required this.table});
+
+  final _ComparisonTableData table;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 620;
+        if (isCompact) return _ComparisonCardTable(table: table);
+        final width = math.max(
+          constraints.maxWidth,
+          table.headers.length * 190,
+        );
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: width.toDouble(),
+                child: Table(
+                  border: TableBorder.all(color: AppColors.line),
+                  columnWidths: {
+                    for (var i = 0; i < table.headers.length; i++)
+                      i: FlexColumnWidth(i == 0 ? 1.05 : 1.35),
+                  },
+                  children: [
+                    TableRow(
+                      decoration: const BoxDecoration(color: Color(0xFFF5FAFF)),
+                      children: [
+                        for (final header in table.headers)
+                          _TableCell(text: header, bold: true),
+                      ],
+                    ),
+                    for (final row in table.rows)
+                      TableRow(
+                        children: [
+                          for (var i = 0; i < table.headers.length; i++)
+                            _TableCell(
+                              text: i < row.length ? row[i] : '',
+                              bold: i == 0,
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ComparisonCardTable extends StatelessWidget {
+  const _ComparisonCardTable({required this.table});
+
+  final _ComparisonTableData table;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (final row in table.rows)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FBFF),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  row.isNotEmpty ? row.first : 'Karşılaştırma satırı',
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (var i = 1; i < table.headers.length; i++) ...[
+                  Text(
+                    table.headers[i],
+                    style: const TextStyle(
+                      color: AppColors.blue,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    i < row.length ? row[i] : '',
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 13.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (i != table.headers.length - 1)
+                    const Divider(height: 16, color: AppColors.softLine),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ComparisonSection extends StatelessWidget {
+  const _ComparisonSection({
+    required this.title,
+    required this.icon,
+    required this.items,
+    required this.color,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<String> items;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: .16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 21),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (final item in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 7),
+                    child: CircleAvatar(radius: 3, backgroundColor: color),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 14,
+                        height: 1.36,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComparisonFallbackText extends StatelessWidget {
+  const _ComparisonFallbackText({required this.content});
+
+  final Object? content;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = _plainTextValue(content);
+    return _AlgorithmCallout(
+      icon: Icons.table_rows_outlined,
+      title: 'Karşılaştırma özeti',
+      text: text,
+      color: AppColors.blue,
+    );
+  }
+}
+
+class _ComparisonTableData {
+  const _ComparisonTableData({required this.headers, required this.rows});
+
+  final List<String> headers;
+  final List<List<String>> rows;
+}
+
+Map<dynamic, dynamic> _comparisonContentMap(Object? content) {
+  if (content is Map) return content;
+  if (content is String) {
+    final text = content.trim();
+    if (text.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map) return decoded;
+      } catch (_) {
+        return const {};
+      }
+    }
+  }
+  return const {};
+}
+
+String _comparisonText(
+  Map<dynamic, dynamic> map,
+  List<String> keys,
+  String fallback,
+) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  return fallback;
+}
+
+List<String> _comparisonList(Map<dynamic, dynamic> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is List && value.isNotEmpty) {
+      return value.map(_comparisonCellText).where((v) => v.isNotEmpty).toList();
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      return value
+          .split(RegExp(r'\n+'))
+          .map((line) => line.replaceFirst(RegExp(r'^[-*]\s*'), '').trim())
+          .where((line) => line.isNotEmpty)
+          .toList();
+    }
+  }
+  return const [];
+}
+
+_ComparisonTableData _comparisonTableFromContent(
+  Object? content,
+  Map<dynamic, dynamic> map,
+) {
+  final markdown = content is String
+      ? _comparisonTableFromMarkdown(content)
+      : null;
+  if (markdown != null) return markdown;
+
+  final tableValue = map['table'] ?? map['comparison_table'] ?? map['matrix'];
+  if (tableValue is String) {
+    final parsed = _comparisonTableFromMarkdown(tableValue);
+    if (parsed != null) return parsed;
+  }
+  final tableMap = tableValue is Map ? tableValue : map;
+  final headers = _comparisonHeaders(tableMap);
+  final rowsValue = tableMap['rows'] ?? tableMap['items'] ?? tableMap['data'];
+  final rows = <List<String>>[];
+  if (rowsValue is List) {
+    for (final row in rowsValue) {
+      rows.add(_comparisonRow(row, headers));
+    }
+  }
+  final cleanRows = rows
+      .where((row) => row.any((cell) => cell.trim().isNotEmpty))
+      .toList();
+  return _ComparisonTableData(headers: headers, rows: cleanRows);
+}
+
+List<String> _comparisonHeaders(Map<dynamic, dynamic> map) {
+  final raw = map['headers'] ?? map['columns'];
+  if (raw is List && raw.isNotEmpty) {
+    return raw.map(_comparisonCellText).where((v) => v.isNotEmpty).toList();
+  }
+  return const ['Özellik', 'Kavram A', 'Kavram B', 'Ayırt ettiren ipucu'];
+}
+
+List<String> _comparisonRow(Object? row, List<String> headers) {
+  if (row is List) {
+    return row.map(_comparisonCellText).toList();
+  }
+  if (row is Map) {
+    final label = _comparisonCellText(
+      row['label'] ?? row['criterion'] ?? row['feature'] ?? row['ozellik'],
+    );
+    final values = row['values'] ?? row['cells'];
+    if (values is List) {
+      return [label, ...values.map(_comparisonCellText)];
+    }
+    return [
+      for (final header in headers)
+        _comparisonCellText(row[header] ?? row[header.toLowerCase()]),
+    ];
+  }
+  return [_comparisonCellText(row)];
+}
+
+String _comparisonCellText(Object? value) {
+  if (value == null) return '';
+  if (value is String) return value.trim();
+  if (value is List) {
+    return value.map(_comparisonCellText).where((v) => v.isNotEmpty).join(', ');
+  }
+  if (value is Map) {
+    return value.entries
+        .map((entry) {
+          final key = entry.key.toString();
+          final text = _comparisonCellText(entry.value);
+          return text.isEmpty ? '' : '$key: $text';
+        })
+        .where((v) => v.isNotEmpty)
+        .join('\n');
+  }
+  return value.toString().trim();
+}
+
+_ComparisonTableData? _comparisonTableFromMarkdown(String value) {
+  final lines = value
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.startsWith('|') && line.endsWith('|'))
+      .toList();
+  if (lines.length < 2) return null;
+  final parsed = lines
+      .map((line) => line.substring(1, line.length - 1).split('|'))
+      .map((cells) => cells.map((cell) => cell.trim()).toList())
+      .toList();
+  final headers = parsed.first;
+  final body = parsed.skip(1).where((row) {
+    return !row.every((cell) => RegExp(r'^:?-{3,}:?$').hasMatch(cell));
+  }).toList();
+  if (headers.isEmpty || body.isEmpty) return null;
+  return _ComparisonTableData(headers: headers, rows: body);
 }
 
 class _AlgorithmResultView extends StatelessWidget {
@@ -5334,6 +6037,47 @@ class _SourceRequiredNotice extends StatelessWidget {
   }
 }
 
+class _LabLikeNotice extends StatelessWidget {
+  const _LabLikeNotice({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.orange.withValues(alpha: .18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            color: AppColors.orange,
+            size: 20,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppColors.navy,
+                fontSize: 13.5,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CompactSourceTile extends StatelessWidget {
   const _CompactSourceTile({required this.source, this.selected = false});
 
@@ -7097,107 +7841,84 @@ class _ComparisonSourceLine extends StatelessWidget {
   }
 }
 
-class _TopicButton extends StatefulWidget {
-  const _TopicButton({required this.label, this.selected = false, this.icon});
-
-  final String label;
-  final bool selected;
-  final IconData? icon;
-
-  @override
-  State<_TopicButton> createState() => _TopicButtonState();
-}
-
-class _TopicButtonState extends State<_TopicButton> {
-  late bool selected;
-
-  @override
-  void initState() {
-    super.initState();
-    selected = widget.selected;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        if (widget.label.isEmpty) {
-          _showBaseForceToast(
-            context,
-            'Konu listesi backend desteği geldikten sonra genişletilecek.',
-          );
-          return;
-        }
-        setState(() => selected = !selected);
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        height: 50,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.selectedBlue : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? AppColors.blue : AppColors.line,
-            width: selected ? 1.4 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.icon != null)
-              Icon(widget.icon, color: AppColors.navy)
-            else
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: selected ? AppColors.blue : AppColors.navy,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            if (selected) ...[
-              const SizedBox(width: 10),
-              const Icon(
-                Icons.check_circle_rounded,
-                color: AppColors.blue,
-                size: 20,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _TableSettingsPanel extends StatelessWidget {
-  const _TableSettingsPanel();
+  const _TableSettingsPanel({
+    required this.tableFormat,
+    required this.detailLevel,
+    required this.qualityTier,
+    required this.onTableFormatChanged,
+    required this.onDetailLevelChanged,
+    required this.onQualityTierChanged,
+  });
+
+  final String tableFormat;
+  final String detailLevel;
+  final String qualityTier;
+  final ValueChanged<String> onTableFormatChanged;
+  final ValueChanged<String> onDetailLevelChanged;
+  final ValueChanged<String> onQualityTierChanged;
 
   @override
   Widget build(BuildContext context) {
     return _BasePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text('Tablo Ayarları', style: _titleStyle),
-          SizedBox(height: 12),
+        children: [
+          const _PanelTitle(icon: Icons.tune_rounded, title: 'Tablo Formatı'),
+          const SizedBox(height: 12),
+          _ComparisonChoiceGrid(
+            values: const [
+              'Klasik tablo',
+              'Sütun bazlı ayrım',
+              '“Ayırt ettiren ipucu” tablosu',
+              'Tanı / Tetkik / Tedavi matrisi',
+              'Artı-eksi karşılaştırması',
+              'Mini özet + tablo',
+            ],
+            selected: tableFormat,
+            onSelected: onTableFormatChanged,
+          ),
+          const SizedBox(height: 18),
+          const _PanelTitle(
+            icon: Icons.density_medium_rounded,
+            title: 'Kapsam ve Kalite',
+          ),
+          const SizedBox(height: 12),
           _ResponsiveGrid(
             minItemWidth: 210,
             children: [
-              _DropdownBox(label: 'Sütun Stili', value: 'Konu Bazlı'),
-              _DropdownBox(label: 'Özet Derinliği', value: 'Orta'),
-              _DropdownBox(label: 'Vurgu Tercihi', value: 'Fark Odaklı'),
+              _ChoicePanel(
+                label: 'Kapsam / Yoğunluk',
+                values: const [
+                  'Kısa',
+                  'Dengeli',
+                  'Detaylı',
+                  'Klinik odaklı',
+                  'Sınav odaklı',
+                ],
+                selected: detailLevel,
+                onSelected: onDetailLevelChanged,
+              ),
+              _ChoicePanel(
+                label: 'Kalite',
+                values: const ['Ekonomik', 'Standart', 'Premium'],
+                selected: qualityTier,
+                onSelected: onQualityTierChanged,
+              ),
             ],
           ),
-          SizedBox(height: 14),
+          const SizedBox(height: 14),
           Row(
             children: [
-              Icon(Icons.info_outline_rounded, color: AppColors.blue, size: 20),
-              SizedBox(width: 8),
-              Expanded(
+              const Icon(
+                Icons.info_outline_rounded,
+                color: AppColors.blue,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
                 child: Text(
-                  'Benzerlikler yeşil, farklılıklar kırmızı ile vurgulanacaktır.',
+                  'Tablo klinik bulgu, tanı/tetkik, tedavi, mekanizma, TUS ipucu ve kırmızı bayrak ayrımlarını önceliklendirir.',
                   style: TextStyle(color: AppColors.muted, fontSize: 15),
                 ),
               ),
@@ -7209,55 +7930,179 @@ class _TableSettingsPanel extends StatelessWidget {
   }
 }
 
-class _DropdownBox extends StatelessWidget {
-  const _DropdownBox({required this.label, required this.value});
+class _ChoicePanel extends StatelessWidget {
+  const _ChoicePanel({
+    required this.label,
+    required this.values,
+    required this.selected,
+    required this.onSelected,
+  });
 
   final String label;
-  final String value;
+  final List<String> values;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final value in values)
+                _SmallChoiceChip(
+                  label: value,
+                  selected: selected == value,
+                  onTap: () => onSelected(value),
+                ),
+            ],
+          ),
+          if (label == 'Kalite' && selected == 'Premium') ...[
+            const SizedBox(height: 10),
+            const Text(
+              'Premium daha yüksek MC tüketebilir.',
+              style: TextStyle(
+                color: AppColors.orange,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SmallChoiceChip extends StatelessWidget {
+  const _SmallChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => _showBaseForceToast(
-        context,
-        'Bu ayar üretim isteğine backend desteği geldikten sonra bağlanacak.',
-      ),
-      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.line),
+          color: selected ? AppColors.selectedBlue : const Color(0xFFF8FBFF),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: selected ? AppColors.blue : AppColors.line),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.blue : AppColors.navy,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ComparisonChoiceGrid extends StatelessWidget {
+  const _ComparisonChoiceGrid({
+    required this.values,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<String> values;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ResponsiveGrid(
+      minItemWidth: 205,
+      children: [
+        for (final value in values)
+          _ComparisonChoiceCard(
+            label: value,
+            selected: selected == value,
+            onTap: () => onSelected(value),
+          ),
+      ],
+    );
+  }
+}
+
+class _ComparisonChoiceCard extends StatelessWidget {
+  const _ComparisonChoiceCard({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 58),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.selectedBlue : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? AppColors.blue : AppColors.line,
+            width: selected ? 1.4 : 1,
+          ),
         ),
         child: Row(
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      color: AppColors.navy,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: selected ? AppColors.blue : AppColors.muted,
+              size: 20,
             ),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: AppColors.muted,
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? AppColors.blue : AppColors.navy,
+                  fontSize: 14,
+                  height: 1.2,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ],
         ),

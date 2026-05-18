@@ -43,6 +43,8 @@ export interface GenerationOptions {
   lengthTarget?: string;
   outputFormat?: string;
   algorithmType?: string;
+  comparisonType?: string;
+  tableFormat?: string;
   detailLevel?: string;
   infographicType?: string;
   visualStyle?: string;
@@ -534,15 +536,40 @@ Lütfen sadece JSON döndür.`;
     sourceText: string,
     options: GenerationOptions = {},
   ): Promise<GenerationResult<ComparisonTable>> {
+    const comparisonType = options.comparisonType ?? "disease_comparison";
+    const tableFormat = options.tableFormat ?? "distinguishing_clue_table";
+    const detailLevel = options.detailLevel ?? "balanced";
+    const qualityTier = options.qualityTier ?? "standard";
     const systemInstruction =
       `Sen tıbbi kavramları karşılaştıran tablo oluşturan bir uzmansın.
 Kurallar:
-- Net başlıklar kullan
-- Karşılaştırılabilir özellikler seç
-- Kısa ve öz bilgi ver`;
+- Benzer hastalıkları, ilaçları, mekanizmaları ve klinik tabloları sınav odaklı ayır
+- Klinik bulgu, tanı/tetkik, tedavi, mekanizma, kırmızı bayrak ve TUS ipuçlarını net yaz
+- Kaynakta olmayan kesin bilgileri uydurma; belirsizse "kaynakta belirtilmemiş" de
+- Sadece geçerli JSON döndür`;
 
-    const prompt = `Aşağıdaki metinden karşılaştırma tablosu oluştur.
-JSON formatı: {"title": "başlık", "headers": ["özellik", "A", "B"], "rows": [{"label": "özellik1", "values": ["değer1", "değer2"]}]}
+    const prompt = `Aşağıdaki metinden tıp öğrencisi için karşılaştırma tablosu oluştur.
+Karşılaştırma tipi: ${comparisonType}
+Tablo formatı: ${tableFormat}
+Detay seviyesi: ${detailLevel}
+Kalite: ${qualityTier}
+
+JSON formatı:
+{
+  "title": "başlık",
+  "headers": ["Özellik", "Kavram A", "Kavram B", "Ayırt ettiren ipucu"],
+  "rows": [
+    {"label": "Klinik bulgu", "values": ["...", "...", "..."]},
+    {"label": "Tanı / tetkik", "values": ["...", "...", "..."]},
+    {"label": "Tedavi", "values": ["...", "...", "..."]},
+    {"label": "Mekanizma", "values": ["...", "...", "..."]}
+  ],
+  "distinguishing_tips": ["..."],
+  "clinical_notes": ["..."],
+  "commonly_confused": ["..."],
+  "red_flags": ["..."],
+  "summary": "kısa sonuç"
+}
 
 Kaynak metin:
 ${sourceText}

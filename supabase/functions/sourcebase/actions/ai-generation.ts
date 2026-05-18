@@ -309,6 +309,8 @@ export async function createGenerationJob(
       lengthTarget: textOption(payload.length_target),
       outputFormat: textOption(payload.output_format),
       algorithmType: textOption(payload.algorithm_type),
+      comparisonType: textOption(payload.comparison_type),
+      tableFormat: textOption(payload.table_format),
       detailLevel: textOption(payload.detail_level),
       infographicType: textOption(payload.infographic_type),
       visualStyle: textOption(payload.visual_style),

@@ -5,7 +5,12 @@
  * AGENTS.md Kural 11: OpenAI API key sadece server-side kullanılır.
  */
 
-import { getVertexConfig } from "../config.ts";
+import {
+  getGcsConfig,
+  getSupabaseServiceRoleKey,
+  getSupabaseUrl,
+  getVertexConfig,
+} from "../config.ts";
 import {
   GenerationJob,
   GenerationType,
@@ -85,8 +90,8 @@ export async function processFileExtraction(
 }
 
 async function extractTextFromDriveFile(userId: string, fileId: string) {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseUrl = getSupabaseUrl();
+  const serviceKey = getSupabaseServiceRoleKey();
 
   if (!supabaseUrl || !serviceKey) {
     throw new SafeError(
@@ -128,10 +133,10 @@ async function extractTextFromDriveFile(userId: string, fileId: string) {
     );
   }
 
-  const serviceAccountJson = Deno.env.get(
-    "SOURCEBASE_GCS_SERVICE_ACCOUNT_JSON",
-  );
-  if (!serviceAccountJson) {
+  let serviceAccountJson = "";
+  try {
+    serviceAccountJson = getGcsConfig().serviceAccountJson;
+  } catch (_error) {
     throw new SafeError("GCS_NOT_CONFIGURED", "GCS yapılandırılmamış.", 500);
   }
 
@@ -682,8 +687,8 @@ function isUuid(value: string) {
 }
 
 async function assertDriveFileOwned(userId: string, fileId: string) {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseUrl = getSupabaseUrl();
+  const serviceKey = getSupabaseServiceRoleKey();
   if (!supabaseUrl || !serviceKey) {
     throw new SafeError(
       "CONFIG_ERROR",

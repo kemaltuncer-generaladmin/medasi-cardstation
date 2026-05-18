@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SourceBaseAuthConfig {
@@ -15,6 +16,10 @@ class SourceBaseAuthConfig {
     'SOURCEBASE_PUBLIC_URL',
     defaultValue: 'http://localhost:8088',
   );
+  static const mobileRedirectUrl = String.fromEnvironment(
+    'SOURCEBASE_MOBILE_REDIRECT_URL',
+    defaultValue: 'sourcebase://auth/callback',
+  );
   static const googleOAuthEnabled = bool.fromEnvironment(
     'SOURCEBASE_GOOGLE_OAUTH_ENABLED',
   );
@@ -29,6 +34,9 @@ class SourceBaseAuthConfig {
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
   static String get authRedirectTo {
+    if (!kIsWeb) {
+      return mobileRedirectUrl;
+    }
     final normalized = publicUrl.endsWith('/')
         ? publicUrl.substring(0, publicUrl.length - 1)
         : publicUrl;
@@ -254,7 +262,8 @@ class SourceBaseAuthBackend {
     final auth = _authOrThrow();
     final fragmentParameters = _fragmentParameters(uri);
     String? redirectType;
-    final errorDescription = uri.queryParameters['error_description'] ??
+    final errorDescription =
+        uri.queryParameters['error_description'] ??
         fragmentParameters['error_description'];
     final error = uri.queryParameters['error'] ?? fragmentParameters['error'];
     if (errorDescription != null || error != null) {

@@ -25,6 +25,7 @@ Required public build arguments:
 - `SOURCEBASE_SUPABASE_URL`
 - `SOURCEBASE_SUPABASE_PUBLIC_TOKEN`
 - `SOURCEBASE_PUBLIC_URL`
+- `SOURCEBASE_MOBILE_REDIRECT_URL` for native builds, defaulting to `sourcebase://auth/callback`
 
 `SOURCEBASE_SUPABASE_PUBLIC_TOKEN` is passed into Flutter as `SOURCEBASE_SUPABASE_ANON_KEY` during the Docker build. These values connect SourceBase to the same shared MedAsi Supabase backend/Auth user pool as Qlinik. In production this backend can be exposed through the shared Supabase custom API domain `https://medasi.com.tr`; `https://sourcebase.medasi.com.tr` is the SourceBase web app/origin, not a separate database. Do not use `service_role` keys in Flutter, Docker build args, or browser code.
 
@@ -33,6 +34,18 @@ Required public build arguments:
 SourceBase uses the shared MedAsi Supabase Auth pool so a user created in Qlinik can sign in here, and a user created here exists in the same Auth pool for Qlinik. SourceBase signups include `app_code=sourcebase` in user metadata, but this app does not write to Qlinik tables or Qlinik Edge Functions.
 
 Email verification and password reset requests use `SOURCEBASE_PUBLIC_URL` as the redirect target. If Qlinik and SourceBase need different email HTML/templates inside the same Supabase project, configure Supabase Auth with an app-aware custom email hook/template router; the built-in project-level templates are shared unless routed server-side.
+
+## Local Web And Simulator Runs
+
+Use the same `.env` values for local web and native simulator runs so auth config stays aligned across platforms:
+
+```bash
+scripts/run_sourcebase_web.sh
+scripts/run_sourcebase_mobile.sh ios
+scripts/run_sourcebase_mobile.sh android
+```
+
+The scripts pass the Supabase URL, anon/public token, public web URL, mobile redirect URL, and OAuth feature flags via `--dart-define`. Running raw `flutter run` without these defines will start an intentionally unconfigured app.
 
 Useful Flutter resources:
 

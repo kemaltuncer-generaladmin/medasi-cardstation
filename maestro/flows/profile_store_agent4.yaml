@@ -1,0 +1,17 @@
+appId: tr.com.medasi.sourcebase
+---
+- launchApp
+- assertVisible: "Hoş geldin"
+- assertVisible: "Giriş Yap"
+- assertVisible: "Hesap Oluştur"
+- assertVisible:
+    text: "Bu giriş yöntemi şu anda aktif değil."
+    optional: true
+- tapOn: "E-posta"
+- inputText: "agent4@example.com"
+- tapOn: "Şifre"
+- inputText: "wrong-password"
+- tapOn: "Giriş Yap"
+- assertVisible:
+    text: "E-posta veya şifre hatalı."
+    optional: true

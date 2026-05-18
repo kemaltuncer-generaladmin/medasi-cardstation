@@ -8,6 +8,9 @@ class SourceBaseApiException implements Exception {
   final String? code;
   final int? status;
 
+  bool get isUnauthorized =>
+      status == 401 || code == 'UNAUTHORIZED' || code == 'AUTH_NOT_CONFIGURED';
+
   @override
   String toString() {
     final prefix = code == null || code!.isEmpty ? '' : '$code: ';

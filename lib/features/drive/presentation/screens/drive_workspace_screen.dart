@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:responsive_builder/responsive_builder.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../auth/data/sourcebase_auth_backend.dart';
+import '../../../auth/presentation/screens/login_screen.dart';
 import '../../../baseforce/presentation/screens/baseforce_screen.dart';
 import '../../../sourcelab/presentation/screens/source_lab_screen.dart';
 import '../../data/drive_models.dart';
 import '../../data/drive_upload_payload.dart';
 import '../../data/drive_repository.dart';
 import '../../data/drive_upload_service.dart';
+import '../../data/sourcebase_drive_api.dart';
 import '../widgets/drive_ui.dart';
 import '../widgets/sourcebase_bottom_nav.dart';
 import '../widgets/sourcebase_nav_rail.dart';
@@ -82,6 +85,18 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      if (_isUnauthorizedSession(e)) {
+        await SourceBaseAuthBackend.signOut();
+        if (!mounted) return;
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          LoginScreen.route,
+          (_) => false,
+          arguments: const {
+            'error': 'Oturum süren doldu. Lütfen tekrar giriş yap.',
+          },
+        );
+        return;
+      }
       setState(() {
         errorMessage = _friendlyError(e);
         loading = false;
@@ -985,7 +1000,21 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
   }
 
   String _friendlyError(Object error) {
+    if (_isUnauthorizedSession(error)) {
+      return 'Oturum süren doldu. Lütfen tekrar giriş yap.';
+    }
     return _friendlyMessage(error.toString());
+  }
+
+  bool _isUnauthorizedSession(Object error) {
+    if (error is SourceBaseApiException) {
+      return error.isUnauthorized;
+    }
+    final text = error.toString();
+    return text.contains('UNAUTHORIZED') ||
+        text.contains('Oturum gerekli') ||
+        text.contains('Oturum doğrulanamadı') ||
+        text.contains('401');
   }
 
   String _friendlyMessage(String message) {
@@ -998,6 +1027,19 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
         .trim();
     if (text.contains('Supabase client is not configured')) {
       return 'Drive bağlantısı yapılandırılmamış.';
+    }
+    if (text.contains('UNAUTHORIZED') ||
+        text.contains('Oturum gerekli') ||
+        text.contains('Oturum doğrulanamadı')) {
+      return 'Oturum süren doldu. Lütfen tekrar giriş yap.';
+    }
+    if (text.contains('INSUFFICIENT_MC')) {
+      return 'MedAsiCoin bakiyen yetersiz. Mağazadan paket alıp tekrar deneyebilirsin.';
+    }
+    if (text.contains('refund') ||
+        text.contains('iade') ||
+        text.contains('WALLET_ERROR')) {
+      return 'İşlem tamamlanamadı. Rezerve edilen MedAsiCoin varsa otomatik olarak iade edilir.';
     }
     if (text.contains('Unexpected SourceBase response') ||
         text.contains('Drive workspace response is empty') ||

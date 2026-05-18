@@ -49,9 +49,12 @@ class DriveUploadService {
         return;
       }
       final result = reader.result;
-      final bytes = result is ByteBuffer
-          ? Uint8List.view(result)
-          : Uint8List.fromList(const []);
+      final bytes = switch (result) {
+        ByteBuffer buffer => Uint8List.view(buffer),
+        Uint8List data => data,
+        List<int> data => Uint8List.fromList(data),
+        _ => Uint8List.fromList(const []),
+      };
       if (!picked.isCompleted) {
         picked.complete(
           PickedDriveFile(

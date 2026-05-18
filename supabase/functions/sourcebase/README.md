@@ -38,6 +38,10 @@ Set these in the SourceBase Supabase/Coolify server environment only:
 - `OPENAI_API_KEY` optional, server-side only
 - `ANTHROPIC_API_KEY` optional, server-side only
 - `STABILITY_API_KEY` optional, server-side only
+- `MC_TL_VALUE` default `3.5`
+- `TARGET_GROSS_MARGIN` default `0.70`
+- `MIN_MC_UNIT` default `0.05`
+- `MC_MICRO_PRICING_ENABLED` default `true`
 
 `SOURCEBASE_GCS_SERVICE_ACCOUNT_JSON` must be the raw service-account JSON
 string. Keep it out of Git and out of Flutter build args. AI provider keys must

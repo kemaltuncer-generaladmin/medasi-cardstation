@@ -8,6 +8,7 @@ import {
   cancelJob,
   centralAiChat,
   createGenerationJob,
+  estimateGenerationCost,
   getGeneratedContent,
   getJobStatus,
   listUserJobs,
@@ -122,6 +123,8 @@ Deno.serve(async (request) => {
         return success(await processFileExtraction(user.id, payload));
       case "create_generation_job":
         return success(await createGenerationJob(user.id, payload));
+      case "estimate_generation_cost":
+        return success(await estimateGenerationCost(user.id, payload));
       case "get_job_status":
         return success(await getJobStatus(user.id, payload));
       case "get_generated_content":

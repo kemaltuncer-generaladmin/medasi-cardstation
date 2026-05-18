@@ -12,6 +12,8 @@ import {
   SafeError,
 } from "../types.ts";
 import { generateInfographicImage } from "./image-provider.ts";
+import { captureMedasiCoin, refundMedasiCoin } from "./medasicoin-wallet.ts";
+import type { McPricingQuote } from "./medasicoin-pricing.ts";
 import { resolveTextRoute, RouteOptions, TextRoute } from "./model-router.ts";
 import {
   GenerationOptions,
@@ -214,6 +216,7 @@ type JobGenerationOptions = {
   temperature?: number;
   maxTokens?: number;
   routeOptions?: RouteOptions;
+  pricing?: McPricingQuote;
 };
 
 type RoutedGenerationResult<T> = GenerationResult<T> & {
@@ -266,6 +269,7 @@ export class JobProcessor {
         metadata: {
           sourceTextLength: input.sourceText.length,
           modelRoute: safeRouteMetadata(route),
+          pricing: input.options?.pricing,
         },
       },
     );
@@ -314,6 +318,13 @@ export class JobProcessor {
           },
         },
       );
+      await captureMedasiCoin({
+        config: this.config,
+        userId: job.owner_user_id,
+        jobId: job.id,
+        reason: `ai_generation_capture:${input.jobType}`,
+        metadata: { modelRoute: result.modelRoute },
+      });
       return {
         ...job,
         status: "completed",
@@ -328,6 +339,19 @@ export class JobProcessor {
         },
       };
     } catch (error) {
+      const pricing = isPricingQuote(job.metadata?.pricing)
+        ? job.metadata.pricing
+        : undefined;
+      await refundMedasiCoin({
+        config: this.config,
+        userId: job.owner_user_id,
+        jobId: job.id,
+        amountUnits: pricing?.amount_units ?? 0,
+        reason: `ai_generation_refund:${input.jobType}`,
+        metadata: {
+          errorCode: error instanceof SafeError ? error.code : "AI_FAILED",
+        },
+      });
       await updateJob(
         this.config.supabaseUrl,
         this.config.serviceRoleKey,
@@ -526,4 +550,9 @@ function safeRouteMetadata(route: TextRoute) {
     reason: route.reason,
     fallbackUsed: route.fallbackUsed,
   };
+}
+
+function isPricingQuote(value: unknown): value is McPricingQuote {
+  return typeof value === "object" && value !== null &&
+    typeof (value as { amount_units?: unknown }).amount_units === "number";
 }

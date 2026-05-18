@@ -15,6 +15,16 @@ import {
 } from "../types.ts";
 import { JobProcessor } from "../services/job-processor.ts";
 import {
+  estimateGenerationPricing,
+  normalizeQualityTier,
+} from "../services/medasicoin-pricing.ts";
+import {
+  captureMedasiCoin,
+  getWalletBalance,
+  refundMedasiCoin,
+  reserveMedasiCoin,
+} from "../services/medasicoin-wallet.ts";
+import {
   resolveTextRoute,
   routeOptionsFromPayload,
 } from "../services/model-router.ts";
@@ -251,8 +261,30 @@ export async function createGenerationJob(
     true,
   );
   const routeOptions = routeOptionsFromPayload(payload);
+  const qualityTier = normalizeQualityTier(payload.quality_tier);
+  const pricing = estimateGenerationPricing({
+    jobType,
+    sourceTextLength: sourceText.length,
+    maxTokens,
+    count,
+    qualityTier,
+    routeOptions,
+  });
+  const config = createVertexConfig();
+  const walletConfig = {
+    supabaseUrl: config.supabaseUrl,
+    serviceRoleKey: config.serviceRoleKey,
+  };
+  const balance = await getWalletBalance(walletConfig, userId);
+  if (balance.balance_units < pricing.amount_units) {
+    throw new SafeError(
+      "INSUFFICIENT_MC",
+      "Yetersiz MedasiCoin bakiyesi.",
+      402,
+    );
+  }
 
-  const processor = createJobProcessor();
+  const processor = new JobProcessor(config);
   await assertJobCapacity(processor, userId, fileId, jobType);
 
   const jobInput = {
@@ -265,9 +297,17 @@ export async function createGenerationJob(
       temperature,
       maxTokens,
       routeOptions,
+      pricing,
     },
   };
   const job = await processor.createQueuedJob(jobInput);
+  const reservation = await reserveMedasiCoin({
+    config: walletConfig,
+    userId,
+    jobId: job.id,
+    quote: pricing,
+    reason: `ai_generation:${jobType}`,
+  });
   scheduleJobProcessing(processor, job, jobInput);
 
   return {
@@ -275,6 +315,63 @@ export async function createGenerationJob(
     status: job.status,
     jobType: job.job_type,
     createdAt: job.created_at,
+    ...pricing,
+    balance_before: reservation.balance_before,
+    balance_after_reserve: reservation.balance_after_reserve,
+  };
+}
+
+export async function estimateGenerationCost(
+  userId: string,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  const rawJobType = requireString(payload.jobType, "jobType");
+  const jobType =
+    rawJobType === "central_ai" || rawJobType === "central_ai_chat"
+      ? "central_ai"
+      : normalizeJobType(rawJobType);
+  const sourceText = sanitizeSourceText(payload.sourceText?.toString() ?? "");
+  const sourceTextLength = sourceText.length ||
+    boundedNumber(
+      payload.sourceTextLength,
+      0,
+      0,
+      MAX_EXPLICIT_SOURCE_CHARS,
+      "sourceTextLength",
+      true,
+    ) ||
+    0;
+  const maxTokens = boundedNumber(
+    payload.maxTokens,
+    undefined,
+    256,
+    8192,
+    "maxTokens",
+    true,
+  );
+  const count = boundedNumber(payload.count, undefined, 1, 100, "count", true);
+  const routeOptions = routeOptionsFromPayload(payload);
+  const qualityTier = normalizeQualityTier(payload.quality_tier);
+  const pricing = estimateGenerationPricing({
+    jobType,
+    sourceTextLength,
+    maxTokens,
+    count,
+    qualityTier,
+    routeOptions,
+  });
+  const config = createVertexConfig();
+  const balance = await getWalletBalance({
+    supabaseUrl: config.supabaseUrl,
+    serviceRoleKey: config.serviceRoleKey,
+  }, userId);
+  return {
+    ...pricing,
+    can_afford: balance.balance_units >= pricing.amount_units,
+    current_balance: balance.balance_mc,
+    balance_after: (balance.balance_units - pricing.amount_units) / 100,
+    explanation:
+      "AI maliyeti gerçek sağlayıcı tahmini + hedef brüt marj ile hesaplandı.",
   };
 }
 
@@ -439,6 +536,40 @@ export async function centralAiChat(
     "context",
   );
   const config = createVertexConfig();
+  const routeOptions = routeOptionsFromPayload(payload);
+  const qualityTier = normalizeQualityTier(payload.quality_tier);
+  const pricing = estimateGenerationPricing({
+    jobType: "central_ai",
+    sourceTextLength: context.length + message.length,
+    maxTokens: boundedNumber(
+      payload.maxTokens,
+      undefined,
+      256,
+      4096,
+      "maxTokens",
+      true,
+    ),
+    qualityTier,
+    routeOptions,
+  });
+  const walletConfig = {
+    supabaseUrl: config.supabaseUrl,
+    serviceRoleKey: config.serviceRoleKey,
+  };
+  const balance = await getWalletBalance(walletConfig, userId);
+  if (balance.balance_units < pricing.amount_units) {
+    throw new SafeError(
+      "INSUFFICIENT_MC",
+      "Yetersiz MedasiCoin bakiyesi.",
+      402,
+    );
+  }
+  const reservation = await reserveMedasiCoin({
+    config: walletConfig,
+    userId,
+    quote: pricing,
+    reason: "central_ai_chat",
+  });
   const vertex = new VertexAIClient({
     projectId: config.vertexProjectId,
     location: config.vertexLocation,
@@ -447,27 +578,51 @@ export async function centralAiChat(
   });
   const route = resolveTextRoute(
     "central_ai_chat",
-    routeOptionsFromPayload(payload),
+    routeOptions,
     context.length + message.length,
   );
-  const reply = await vertex.generateCentralAiReply(message, context, {
-    provider: route.provider,
-    model: route.model,
-  });
-
-  return {
-    message: reply.content,
-    inputTokens: reply.inputTokens,
-    outputTokens: reply.outputTokens,
-    costEstimate: reply.costEstimate,
-    modelRoute: {
+  try {
+    const reply = await vertex.generateCentralAiReply(message, context, {
       provider: route.provider,
       model: route.model,
-      tier: route.tier,
-      reason: route.reason,
-      fallbackUsed: route.fallbackUsed,
-    },
-  };
+    });
+    await captureMedasiCoin({
+      config: walletConfig,
+      userId,
+      reason: "central_ai_chat_capture",
+      metadata: { pricing, modelRoute: pricing.route },
+    });
+
+    return {
+      message: reply.content,
+      inputTokens: reply.inputTokens,
+      outputTokens: reply.outputTokens,
+      costEstimate: reply.costEstimate,
+      modelRoute: {
+        provider: route.provider,
+        model: route.model,
+        tier: route.tier,
+        reason: route.reason,
+        fallbackUsed: route.fallbackUsed,
+      },
+      ...pricing,
+      balance_before: reservation.balance_before,
+      balance_after_reserve: reservation.balance_after_reserve,
+    };
+  } catch (error) {
+    await refundMedasiCoin({
+      config: walletConfig,
+      userId,
+      amountUnits: pricing.amount_units,
+      reason: "central_ai_chat_refund",
+      metadata: {
+        errorCode: error instanceof SafeError
+          ? error.code
+          : "CENTRAL_AI_FAILED",
+      },
+    });
+    throw error;
+  }
 }
 
 /**

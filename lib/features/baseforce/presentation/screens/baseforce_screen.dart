@@ -8,6 +8,7 @@ import '../../../../core/widgets/sourcebase_brand.dart';
 import '../../../drive/data/drive_models.dart';
 import '../../../drive/data/sourcebase_drive_api.dart';
 import '../../../drive/presentation/widgets/drive_ui.dart';
+import '../../../drive/presentation/widgets/sourcebase_bottom_nav.dart';
 
 enum BaseForceView {
   home,
@@ -787,7 +788,12 @@ class _BaseForcePage extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 940),
         child: ListView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(32, 18, 32, 142),
+          padding: EdgeInsets.fromLTRB(
+            32,
+            18,
+            32,
+            SourceBaseBottomNavMetrics.contentBottomPadding(context),
+          ),
           children: [
             _BaseForceTopBar(onSearch: onSearch, onBack: onBack),
             _BaseForceHero(

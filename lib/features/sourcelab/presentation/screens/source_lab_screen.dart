@@ -9,6 +9,7 @@ import '../../../../core/widgets/sourcebase_brand.dart';
 import '../../../drive/data/drive_models.dart';
 import '../../../drive/data/sourcebase_drive_api.dart';
 import '../../../drive/presentation/widgets/drive_ui.dart';
+import '../../../drive/presentation/widgets/sourcebase_bottom_nav.dart';
 
 enum SourceLabView {
   home,
@@ -3037,7 +3038,7 @@ class _LabScroll extends StatelessWidget {
             horizontalPadding,
             16,
             horizontalPadding,
-            142,
+            SourceBaseBottomNavMetrics.contentBottomPadding(context),
           ),
           children: [
             for (final child in children) ...[

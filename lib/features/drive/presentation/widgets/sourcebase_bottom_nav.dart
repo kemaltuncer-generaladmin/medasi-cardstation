@@ -2,6 +2,38 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 
+class SourceBaseBottomNavMetrics {
+  const SourceBaseBottomNavMetrics._();
+
+  static const double horizontalInset = 14;
+  static const double bottomGap = 10;
+  static const double containerTopPadding = 12;
+  static const double containerBottomPadding = 18;
+  static const double itemHeight = 78;
+  static const double contentBuffer = 28;
+
+  static double safeBottom(BuildContext context) {
+    return MediaQuery.viewPaddingOf(context).bottom;
+  }
+
+  static double bottomOffset(BuildContext context) {
+    return bottomGap + safeBottom(context);
+  }
+
+  static double navHeight(BuildContext context) {
+    return bottomOffset(context) +
+        containerTopPadding +
+        itemHeight +
+        containerBottomPadding;
+  }
+
+  static double contentBottomPadding(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width >= 900) return 72;
+    return navHeight(context) + contentBuffer;
+  }
+}
+
 class SourceBaseBottomNav extends StatelessWidget {
   const SourceBaseBottomNav({
     required this.selectedIndex,
@@ -23,14 +55,19 @@ class SourceBaseBottomNav extends StatelessWidget {
     ];
 
     return Positioned(
-      left: 14,
-      right: 14,
-      bottom: 10,
+      left: SourceBaseBottomNavMetrics.horizontalInset,
+      right: SourceBaseBottomNavMetrics.horizontalInset,
+      bottom: SourceBaseBottomNavMetrics.bottomOffset(context),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 18),
+            padding: const EdgeInsets.fromLTRB(
+              12,
+              SourceBaseBottomNavMetrics.containerTopPadding,
+              12,
+              SourceBaseBottomNavMetrics.containerBottomPadding,
+            ),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: .96),
               borderRadius: BorderRadius.circular(24),
@@ -91,7 +128,7 @@ class _BottomNavButton extends StatelessWidget {
         child: ExcludeSemantics(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            height: 78,
+            height: SourceBaseBottomNavMetrics.itemHeight,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
             decoration: BoxDecoration(
               color: selected ? AppColors.selectedBlue : Colors.transparent,

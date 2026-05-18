@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/sourcebase_brand.dart';
 import '../../../../core/widgets/responsive_layout.dart';
 import '../../data/drive_models.dart';
+import 'sourcebase_bottom_nav.dart';
 
 // Re-export design system buttons for backward compatibility
 export '../../../../core/design_system/buttons/sb_primary_button.dart';
@@ -44,7 +45,9 @@ class WorkspaceScroll extends StatelessWidget {
     final isDesktop = ResponsiveLayout.isDesktop(context);
     final isTablet = ResponsiveLayout.isTablet(context);
     final horizontalPadding = ResponsiveLayout.getHorizontalPadding(context);
-    final bottomPadding = isDesktop ? 48.0 : (isTablet ? 48.0 : 138.0);
+    final bottomPadding = SourceBaseBottomNavMetrics.contentBottomPadding(
+      context,
+    );
     final topPadding = isDesktop || isTablet
         ? 18.0
         : MediaQuery.viewPaddingOf(context).top + 8.0;

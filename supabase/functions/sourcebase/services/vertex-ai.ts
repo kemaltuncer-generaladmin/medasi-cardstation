@@ -42,6 +42,11 @@ export interface GenerationOptions {
   summaryMode?: string;
   lengthTarget?: string;
   outputFormat?: string;
+  cardStyle?: string;
+  extractKeyConcepts?: boolean;
+  addHints?: boolean;
+  questionType?: string;
+  explanations?: boolean;
   algorithmType?: string;
   comparisonType?: string;
   tableFormat?: string;
@@ -325,6 +330,12 @@ Kurallar:
 - Türkçe tıbbi terimler kullanın`;
 
     const prompt = `Aşağıdaki kaynak metinden ${count} adet flashcard üret.
+Kart stili: ${options.cardStyle ?? "classic"}
+Zorluk: ${options.difficulty ?? "medium"}
+Anahtar kavram çıkarımı: ${
+      options.extractKeyConcepts === false ? "hayır" : "evet"
+    }
+İpucu ekle: ${options.addHints === false ? "hayır" : "evet"}
 Her kart JSON formatında olmalı: {"front": "soru", "back": "cevap", "explanation": "açıklama", "difficulty": "easy|medium|hard"}
 
 Kaynak metin:
@@ -361,8 +372,10 @@ Kurallar:
 - Her soru için açıklama ekle
 - Kaynakta olmayan bilgi uydurmayın`;
 
-    const prompt =
-      `Aşağıdaki kaynak metinden ${count} adet çoktan seçmeli soru üret.
+    const prompt = `Aşağıdaki kaynak metinden ${count} adet soru üret.
+Soru tipi: ${options.questionType ?? "multiple_choice"}
+Zorluk: ${options.difficulty ?? "medium"}
+Açıklama ekle: ${options.explanations === false ? "hayır" : "evet"}
 Her soru JSON formatında: {"question": "soru", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "açıklama", "difficulty": "easy|medium|hard"}
 
 Kaynak metin:
@@ -556,7 +569,8 @@ Kurallar:
 - Kaynakta olmayan kesin bilgileri uydurma; belirsizse "kaynakta belirtilmemiş" de
 - Sadece geçerli JSON döndür`;
 
-    const prompt = `Aşağıdaki metinden tıp öğrencisi için karşılaştırma tablosu oluştur.
+    const prompt =
+      `Aşağıdaki metinden tıp öğrencisi için karşılaştırma tablosu oluştur.
 Karşılaştırma tipi: ${comparisonType}
 Tablo formatı: ${tableFormat}
 Detay seviyesi: ${detailLevel}

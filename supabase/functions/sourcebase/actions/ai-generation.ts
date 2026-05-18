@@ -27,6 +27,7 @@ import type { McPricingQuote } from "../services/medasicoin-pricing.ts";
 import {
   estimateGenerationPricing,
   normalizeQualityTier,
+  routeOptionsForQuality,
 } from "../services/medasicoin-pricing.ts";
 import {
   captureMedasiCoin,
@@ -304,8 +305,11 @@ export async function createGenerationJob(
     "maxTokens",
     true,
   );
-  const routeOptions = routeOptionsFromPayload(payload);
   const qualityTier = normalizeQualityTier(payload.quality_tier);
+  const routeOptions = routeOptionsForQuality(
+    qualityTier,
+    routeOptionsFromPayload(payload),
+  );
   const pricing = estimateGenerationPricing({
     jobType,
     sourceTextLength: sourceText.length,
@@ -345,6 +349,11 @@ export async function createGenerationJob(
       summaryMode: textOption(payload.summary_mode),
       lengthTarget: textOption(payload.length_target),
       outputFormat: textOption(payload.output_format),
+      cardStyle: textOption(payload.card_style),
+      extractKeyConcepts: booleanOption(payload.extract_key_concepts),
+      addHints: booleanOption(payload.add_hints),
+      questionType: textOption(payload.question_type),
+      explanations: booleanOption(payload.explanations),
       algorithmType: textOption(payload.algorithm_type),
       comparisonType: textOption(payload.comparison_type),
       tableFormat: textOption(payload.table_format),
@@ -475,6 +484,11 @@ function generationOptionsFromJob(
     summaryMode: textOption(options.summaryMode),
     lengthTarget: textOption(options.lengthTarget),
     outputFormat: textOption(options.outputFormat),
+    cardStyle: textOption(options.cardStyle),
+    extractKeyConcepts: booleanOption(options.extractKeyConcepts),
+    addHints: booleanOption(options.addHints),
+    questionType: textOption(options.questionType),
+    explanations: booleanOption(options.explanations),
     algorithmType: textOption(options.algorithmType),
     comparisonType: textOption(options.comparisonType),
     tableFormat: textOption(options.tableFormat),
@@ -859,6 +873,15 @@ function numericOption(value: unknown) {
   if (value === undefined || value === null || value === "") return undefined;
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
+function booleanOption(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value === "boolean") return value;
+  const text = value.toString().trim().toLowerCase();
+  if (text === "true" || text === "1" || text === "yes") return true;
+  if (text === "false" || text === "0" || text === "no") return false;
+  return undefined;
 }
 
 function isUuid(value: string) {

@@ -1,0 +1,13 @@
+appId: tr.com.medasi.sourcebase
+name: BaseForce Agent 2 Mini Flow
+---
+- launchApp
+- assertVisible: "BaseForce"
+- tapOn: "BaseForce"
+- assertVisible: "Flashcard"
+- tapOn: "Flashcard"
+- assertVisible: "Flashcard Fabrikası"
+- tapOn: "Hazır Kaynak Seç"
+- assertVisible: "Kaynak Seç"
+- assertVisible: "Drive’daki Dosyalar"
+- assertVisible: "kaynak seçildi"

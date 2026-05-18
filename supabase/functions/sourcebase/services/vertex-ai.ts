@@ -42,6 +42,8 @@ export interface GenerationOptions {
   summaryMode?: string;
   lengthTarget?: string;
   outputFormat?: string;
+  algorithmType?: string;
+  detailLevel?: string;
   infographicType?: string;
   visualStyle?: string;
   density?: string;
@@ -471,16 +473,43 @@ Lütfen sadece JSON döndür.`;
     sourceText: string,
     options: GenerationOptions = {},
   ): Promise<GenerationResult<Algorithm>> {
+    const algorithmType = options.algorithmType ?? "diagnostic_algorithm";
+    const outputFormat = options.outputFormat ?? "flowchart";
+    const detailLevel = options.detailLevel ?? "balanced";
+    const qualityTier = options.qualityTier ?? "standard";
     const systemInstruction =
       `Sen tıbbi algoritma ve protokol oluşturan bir uzmansın.
 Kurallar:
-- Adım adım net talimatlar ver
-- Her adımı numaralandır
-- Alt adımlar ekleyebilirsin
-- Klinik karar noktalarını belirt`;
+- Kaynak dışına taşmadan klinik karar ağacı, tanı-tedavi, mekanizma veya sınav çözüm akışı üret
+- Karar düğümlerini ve Evet/Hayır dallarını net ayır
+- Kritik eşikleri, kırmızı bayrakları, tanı -> tetkik -> tedavi -> takip sırasını belirt
+- Temel bilim kaynaklarında mekanizma zinciri kur
+- TUS/sınav odaklı ipuçlarını ayrı yaz
+- Kullanıcıya ham metin değil yapılandırılmış algoritma döndür`;
 
     const prompt = `Aşağıdaki metinden klinik algoritma oluştur.
-JSON formatı: {"title": "başlık", "steps": [{"stepNumber": 1, "title": "adım", "description": "açıklama", "substeps": ["alt1"]}], "notes": ["not1"]}
+
+İstenen seçenekler:
+- algorithm_type: ${algorithmType}
+- output_format: ${outputFormat}
+- detail_level: ${detailLevel}
+- quality_tier: ${qualityTier}
+
+JSON formatı:
+{
+  "title": "başlık",
+  "starting_point": "nereden başlanır",
+  "decision_nodes": [
+    {"title": "karar düğümü", "description": "klinik anlamı", "yes": "evet dalı", "no": "hayır dalı", "substeps": ["alt adım"]}
+  ],
+  "branches": ["Evet -> eylem", "Hayır -> sonraki karar"],
+  "critical_thresholds": ["eşik ve anlamı"],
+  "red_flags": ["acil/kritik bulgu"],
+  "action_steps": ["tanı -> tetkik -> tedavi -> takip adımı"],
+  "exam_tips": ["Sınavda yakala ipucu"],
+  "steps": [{"stepNumber": 1, "title": "adım", "description": "açıklama", "substeps": ["alt1"]}],
+  "notes": ["klinik not"]
+}
 
 Kaynak metin:
 ${sourceText}

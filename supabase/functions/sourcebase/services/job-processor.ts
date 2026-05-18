@@ -222,6 +222,8 @@ type JobGenerationOptions = {
   summaryMode?: string;
   lengthTarget?: string;
   outputFormat?: string;
+  algorithmType?: string;
+  detailLevel?: string;
   infographicType?: string;
   visualStyle?: string;
   density?: string;
@@ -283,6 +285,8 @@ export class JobProcessor {
             summaryMode: input.options?.summaryMode,
             lengthTarget: input.options?.lengthTarget,
             outputFormat: input.options?.outputFormat,
+            algorithmType: input.options?.algorithmType,
+            detailLevel: input.options?.detailLevel,
             infographicType: input.options?.infographicType,
             visualStyle: input.options?.visualStyle,
             density: input.options?.density,
@@ -467,6 +471,8 @@ export class JobProcessor {
       summaryMode: options.summaryMode,
       lengthTarget: options.lengthTarget,
       outputFormat: options.outputFormat,
+      algorithmType: options.algorithmType,
+      detailLevel: options.detailLevel,
       infographicType: options.infographicType,
       visualStyle: options.visualStyle,
       density: options.density,

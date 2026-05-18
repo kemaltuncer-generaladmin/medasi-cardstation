@@ -308,6 +308,8 @@ export async function createGenerationJob(
       summaryMode: textOption(payload.summary_mode),
       lengthTarget: textOption(payload.length_target),
       outputFormat: textOption(payload.output_format),
+      algorithmType: textOption(payload.algorithm_type),
+      detailLevel: textOption(payload.detail_level),
       infographicType: textOption(payload.infographic_type),
       visualStyle: textOption(payload.visual_style),
       density: textOption(payload.density),

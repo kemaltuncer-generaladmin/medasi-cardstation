@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -73,8 +74,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
   bool summaryChecklist = true;
 
   String algorithmMode = 'Tanı Algoritması';
-  String algorithmLayout = 'Dikey';
-  String algorithmDetail = 'Orta';
+  String algorithmLayout = 'Evet/Hayır dallanması';
+  String algorithmDetail = 'Dengeli';
+  String algorithmQuality = 'Standart';
   bool algorithmColorfulNodes = true;
   bool algorithmClinicalNotes = true;
 
@@ -295,6 +297,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
   }
 
   String? _qualityTierFor(GeneratedKind kind) {
+    if (kind == GeneratedKind.algorithm) {
+      return _algorithmQualityValue(algorithmQuality);
+    }
     final difficulty = switch (kind) {
       GeneratedKind.flashcard => flashcardDifficulty,
       GeneratedKind.question => selectedQuestionDifficulty,
@@ -309,6 +314,21 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
   }
 
   Map<String, dynamic>? _generationOptionsFor(GeneratedKind kind) {
+    if (kind == GeneratedKind.algorithm) {
+      final source = _selectedFile();
+      return {
+        'algorithm_type': _algorithmTypeValue(algorithmMode),
+        'output_format': _algorithmFormatValue(algorithmLayout),
+        'detail_level': _algorithmDetailValue(algorithmDetail),
+        'quality_tier': _algorithmQualityValue(algorithmQuality),
+        'source_size_tier': source == null
+            ? null
+            : _baseForceSourceSizeTier(source.sizeLabel),
+        'clinical_notes': algorithmClinicalNotes,
+        'colorful_nodes': algorithmColorfulNodes,
+        'structured': true,
+      };
+    }
     if (kind != GeneratedKind.question) return null;
     final clinical = questionType == 'Klinik Vaka';
     final hard =
@@ -363,6 +383,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
       final createResponse = await _api.createGenerationJob(
         fileId: file.id,
         jobType: jobType,
+        sourceIds: selectedSources.toList(),
         count: _generationCount(kind),
         qualityTier: _qualityTierFor(kind),
         options: _generationOptionsFor(kind),
@@ -373,12 +394,19 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         throw StateError('AI üretim işi başlatılamadı.');
       }
       _updateJob(job.localId, jobId: jobId, status: _JobUiStatus.running);
-      final content = await _pollGeneratedContent(job.localId, jobId);
+      final content = await _pollGeneratedContent(job.localId, jobId, kind);
       final result = _GenerationResult(
         kind: kind,
         title: _baseForceTitle(kind),
         sourceTitle: file.title,
         sourceFileId: file.id,
+        jobId: jobId,
+        createdAtLabel: _baseForceDateTimeLabel(DateTime.now()),
+        mcCostLabel: _baseForceMcCostLabel(data),
+        algorithmType: kind == GeneratedKind.algorithm ? algorithmMode : null,
+        outputFormat: kind == GeneratedKind.algorithm ? algorithmLayout : null,
+        detailLevel: kind == GeneratedKind.algorithm ? algorithmDetail : null,
+        qualityTier: kind == GeneratedKind.algorithm ? algorithmQuality : null,
         content: content,
       );
       var resultSaved = false;
@@ -391,7 +419,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         );
         resultSaved = true;
       } catch (error) {
-        saveError = _friendlyBaseForceError(error);
+        saveError = _friendlyBaseForceError(error, kind: kind);
       }
       if (!mounted) return;
       setState(() {
@@ -408,7 +436,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      final message = _friendlyBaseForceError(error);
+      final message = _friendlyBaseForceError(error, kind: kind);
       setState(() {
         _updateJobValue(
           job.localId,
@@ -421,7 +449,11 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
     }
   }
 
-  Future<Object?> _pollGeneratedContent(String localId, String jobId) async {
+  Future<Object?> _pollGeneratedContent(
+    String localId,
+    String jobId,
+    GeneratedKind kind,
+  ) async {
     const maxAttempts = 24;
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
       final statusResponse = await _api.getJobStatus(jobId);
@@ -433,13 +465,14 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         return contentData is Map ? contentData['content'] : null;
       }
       if (status == 'failed') {
+        final code = data is Map ? data['errorCode']?.toString() : null;
         final message = data is Map
             ? data['errorMessage']?.toString()
             : 'AI üretimi başarısız oldu.';
         throw StateError(
           message == null || message.trim().isEmpty
               ? 'AI üretimi başarısız oldu.'
-              : message,
+              : [code, message].whereType<String>().join(': '),
         );
       }
       if (mounted) {
@@ -596,11 +629,13 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
             algorithmMode: algorithmMode,
             algorithmLayout: algorithmLayout,
             algorithmDetail: algorithmDetail,
+            algorithmQuality: algorithmQuality,
             colorfulNodes: algorithmColorfulNodes,
             clinicalNotes: algorithmClinicalNotes,
             onModeChanged: (v) => setState(() => algorithmMode = v),
             onLayoutChanged: (v) => setState(() => algorithmLayout = v),
             onDetailChanged: (v) => setState(() => algorithmDetail = v),
+            onQualityChanged: (v) => setState(() => algorithmQuality = v),
             onColorfulNodesChanged: (v) =>
                 setState(() => algorithmColorfulNodes = v),
             onClinicalNotesChanged: (v) =>
@@ -641,9 +676,15 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
                 _latestResult?.kind ?? GeneratedKind.flashcard,
               ),
             ),
-            onEdit: () => _toast(
-              'Düzenleme entegrasyonu bağlı değil; yeni sürüm için Yeniden Üret kullanın.',
-            ),
+            onEdit: () {
+              if (_latestResult?.kind == GeneratedKind.algorithm) {
+                _open(BaseForceView.sourcePicker);
+                return;
+              }
+              _toast(
+                'Düzenleme entegrasyonu bağlı değil; yeni sürüm için Yeniden Üret kullanın.',
+              );
+            },
           ),
           BaseForceView.allGenerations => _AllGenerationsScreen(
             data: widget.data,
@@ -716,12 +757,26 @@ class _GenerationResult {
     required this.sourceTitle,
     required this.content,
     this.sourceFileId,
+    this.jobId,
+    this.createdAtLabel,
+    this.mcCostLabel,
+    this.algorithmType,
+    this.outputFormat,
+    this.detailLevel,
+    this.qualityTier,
   });
 
   final GeneratedKind kind;
   final String title;
   final String sourceTitle;
   final String? sourceFileId;
+  final String? jobId;
+  final String? createdAtLabel;
+  final String? mcCostLabel;
+  final String? algorithmType;
+  final String? outputFormat;
+  final String? detailLevel;
+  final String? qualityTier;
   final Object? content;
 }
 
@@ -857,6 +912,84 @@ int _baseForceContentCount(Object? content) {
   return content == null ? 0 : 1;
 }
 
+String _algorithmTypeValue(String label) {
+  return switch (label) {
+    'Tedavi Algoritması' => 'treatment_algorithm',
+    'Klinik Karar Ağacı' => 'clinical_decision_tree',
+    'Patofizyoloji Mekanizma Akışı' => 'pathophysiology_mechanism_flow',
+    'Laboratuvar Yorumlama Akışı' => 'lab_interpretation_flow',
+    'TUS Soru Çözüm Akışı' => 'tus_question_solving_flow',
+    'Acil Yaklaşım Algoritması' => 'emergency_approach_algorithm',
+    _ => 'diagnostic_algorithm',
+  };
+}
+
+String _algorithmFormatValue(String label) {
+  return switch (label) {
+    'Karar ağacı' => 'decision_tree',
+    'Basamaklı algoritma' => 'stepwise_algorithm',
+    'Evet/Hayır dallanması' => 'yes_no_branching',
+    'Mekanizma zinciri' => 'mechanism_chain',
+    'Tablo + akış' => 'table_plus_flow',
+    _ => 'flowchart',
+  };
+}
+
+String _algorithmDetailValue(String label) {
+  return switch (label) {
+    'Kısa' => 'brief',
+    'Detaylı' => 'detailed',
+    'Klinik odaklı' => 'clinical_focused',
+    'Sınav odaklı' => 'exam_focused',
+    _ => 'balanced',
+  };
+}
+
+String _algorithmQualityValue(String label) {
+  return switch (label) {
+    'Ekonomik' => 'economy',
+    'Premium' => 'premium',
+    _ => 'standard',
+  };
+}
+
+String _baseForceSourceSizeTier(String label) {
+  final normalized = label.trim().toLowerCase().replaceAll(',', '.');
+  final match = RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(normalized);
+  final value = double.tryParse(match?.group(1) ?? '');
+  if (value == null) return 'unknown';
+  if (normalized.contains('gb')) return 'large';
+  if (normalized.contains('mb')) {
+    if (value >= 25) return 'large';
+    if (value >= 5) return 'medium';
+    return 'small';
+  }
+  if (normalized.contains('kb')) {
+    if (value >= 5000) return 'medium';
+    return 'small';
+  }
+  return value > 0 ? 'small' : 'empty';
+}
+
+String _baseForceDateTimeLabel(DateTime value) {
+  final local = value.toLocal();
+  return '${local.day.toString().padLeft(2, '0')}.'
+      '${local.month.toString().padLeft(2, '0')}.${local.year} '
+      '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
+}
+
+String _baseForceMcCostLabel(Object? data) {
+  if (data is! Map) {
+    return 'MC tutarı üretim sırasında güvenli şekilde hesaplanır.';
+  }
+  final value = data['final_mc_cost'] ?? data['reserved_mc'];
+  if (value is num && value > 0) {
+    return '${value.toStringAsFixed(value % 1 == 0 ? 0 : 2)} MC rezerve edildi';
+  }
+  return 'MC tutarı üretim sırasında güvenli şekilde hesaplanır.';
+}
+
 String _plainTextForResult(_GenerationResult result) {
   return [
     result.title,
@@ -894,7 +1027,7 @@ String _plainTextValue(Object? value) {
   return text.isEmpty ? 'Sonuç içeriği boş.' : text;
 }
 
-String _friendlyBaseForceError(Object error) {
+String _friendlyBaseForceError(Object error, {GeneratedKind? kind}) {
   final raw = error.toString();
   final text = raw
       .replaceFirst('Bad state: ', '')
@@ -902,6 +1035,9 @@ String _friendlyBaseForceError(Object error) {
       .replaceFirst('FunctionException', '')
       .replaceFirst('FunctionsException', '')
       .trim();
+  final isAlgorithm = kind == GeneratedKind.algorithm;
+  const algorithmFallback =
+      'Algoritma şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
   if (text.isEmpty) return 'AI üretimi tamamlanamadı. Lütfen tekrar deneyin.';
   if (text.contains('SourceBase Supabase client is not configured')) {
     return 'Oturum bağlantısı hazır değil. Lütfen tekrar giriş yapın.';
@@ -915,10 +1051,35 @@ String _friendlyBaseForceError(Object error) {
   }
   if (text.contains('VERTEX_AUTH_FAILED') ||
       text.contains('VERTEX_UPSTREAM_ERROR') ||
-      text.contains('MODEL_NOT_FOUND')) {
+      text.contains('MODEL_NOT_FOUND') ||
+      text.contains('JOB_CREATE_FAILED') ||
+      text.contains('BACKGROUND_JOB_FAILED')) {
+    if (isAlgorithm) return algorithmFallback;
     return 'AI servisi şu anda yanıt veremiyor. Biraz sonra tekrar deneyin.';
   }
+  if (isAlgorithm && text.toLowerCase().contains('ai üretimi başarısız')) {
+    return algorithmFallback;
+  }
   return text;
+}
+
+String _baseForceProgressLabel(
+  GeneratedKind kind,
+  _JobUiStatus status,
+  double progress,
+) {
+  if (status == _JobUiStatus.pending) return 'Kaynak analiz ediliyor';
+  if (kind != GeneratedKind.algorithm) return _jobStatusLabel(status);
+  if (status == _JobUiStatus.completed) return 'Algoritma hazır';
+  if (status == _JobUiStatus.failed) return 'Algoritma tamamlanamadı';
+  final stage = (progress * 5).floor().clamp(0, 4);
+  return const [
+    'Kaynak analiz ediliyor',
+    'Karar noktaları çıkarılıyor',
+    'Dallanma yapısı kuruluyor',
+    'Klinik akış düzenleniyor',
+    'Algoritma hazırlanıyor',
+  ][stage];
 }
 
 String _jobStatusLabel(_JobUiStatus status) {
@@ -2350,11 +2511,13 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
     required this.algorithmMode,
     required this.algorithmLayout,
     required this.algorithmDetail,
+    required this.algorithmQuality,
     required this.colorfulNodes,
     required this.clinicalNotes,
     required this.onModeChanged,
     required this.onLayoutChanged,
     required this.onDetailChanged,
+    required this.onQualityChanged,
     required this.onColorfulNodesChanged,
     required this.onClinicalNotesChanged,
   });
@@ -2368,22 +2531,54 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
   final String algorithmMode;
   final String algorithmLayout;
   final String algorithmDetail;
+  final String algorithmQuality;
   final bool colorfulNodes;
   final bool clinicalNotes;
   final ValueChanged<String> onModeChanged;
   final ValueChanged<String> onLayoutChanged;
   final ValueChanged<String> onDetailChanged;
+  final ValueChanged<String> onQualityChanged;
   final ValueChanged<bool> onColorfulNodesChanged;
   final ValueChanged<bool> onClinicalNotesChanged;
 
   @override
   Widget build(BuildContext context) {
+    final readySources = data.recentFiles
+        .where(
+          (file) =>
+              selectedSources.contains(file.id) &&
+              _isBaseForceReadySource(file),
+        )
+        .toList();
+    final selectedCount = readySources.length;
+    final canGenerate = selectedCount > 0;
+    final sourceSummary = canGenerate
+        ? '$selectedCount kaynak seçildi'
+        : 'Hazır kaynak yok';
     return _BaseForcePage(
-      title: 'Ak\u0131\u015F \u015Eemas\u0131 &\nAlgoritma',
+      title: 'Akış Şeması /\nAlgoritma',
       subtitle:
-          'Klinik s\xFCre\xE7lerinizi g\xF6rsel ak\u0131\u015F \u015Femalar\u0131 ve\nalgoritmalar ile yap\u0131land\u0131r\u0131n.',
+          'Kaynağından klinik karar, mekanizma ve sınav çözüm akışları üret.',
       onSearch: onSearch,
       onBack: onBack,
+      heroTight: true,
+      art: _BaseForceArtKind.stack,
+      actions: [
+        _HeroAction(
+          label: sourceSummary,
+          icon: canGenerate
+              ? Icons.check_circle_outline_rounded
+              : Icons.source_outlined,
+          onTap: onPickSources,
+        ),
+        if (!canGenerate)
+          _HeroAction(
+            label: 'Drive’dan kaynak seç',
+            icon: Icons.drive_folder_upload_outlined,
+            cyan: true,
+            onTap: onPickSources,
+          ),
+      ],
       children: [
         _SelectedSourceChips(
           data: data,
@@ -2401,7 +2596,7 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               _SettingGridRow(
-                label: '\xC7\u0131kt\u0131 Modu',
+                label: 'Algoritma tipi',
                 children: [
                   _SegmentButton(
                     label: 'Tan\u0131 Algoritmas\u0131',
@@ -2410,66 +2605,171 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
                     onTap: () => onModeChanged('Tan\u0131 Algoritmas\u0131'),
                   ),
                   _SegmentButton(
-                    label: 'Tedavi Ak\u0131\u015F\u0131',
+                    label: 'Tedavi Algoritması',
                     icon: Icons.polyline_rounded,
-                    selected: algorithmMode == 'Tedavi Ak\u0131\u015F\u0131',
-                    onTap: () => onModeChanged('Tedavi Ak\u0131\u015F\u0131'),
+                    selected: algorithmMode == 'Tedavi Algoritması',
+                    onTap: () => onModeChanged('Tedavi Algoritması'),
                   ),
                   _SegmentButton(
-                    label: 'Karar A\u011Fac\u0131',
+                    label: 'Klinik Karar Ağacı',
                     icon: Icons.device_hub_rounded,
-                    selected: algorithmMode == 'Karar A\u011Fac\u0131',
-                    onTap: () => onModeChanged('Karar A\u011Fac\u0131'),
+                    selected: algorithmMode == 'Klinik Karar Ağacı',
+                    onTap: () => onModeChanged('Klinik Karar Ağacı'),
                   ),
                 ],
               ),
               _SettingGridRow(
-                label: 'Yerle\u015Fim Y\xF6n\xFC',
+                label: 'Algoritma tipi',
                 children: [
                   _SegmentButton(
-                    label: 'Dikey',
-                    icon: Icons.tune_rounded,
-                    selected: algorithmLayout == 'Dikey',
-                    onTap: () => onLayoutChanged('Dikey'),
+                    label: 'Patofizyoloji Mekanizma Akışı',
+                    icon: Icons.schema_outlined,
+                    selected: algorithmMode == 'Patofizyoloji Mekanizma Akışı',
+                    onTap: () => onModeChanged('Patofizyoloji Mekanizma Akışı'),
                   ),
                   _SegmentButton(
-                    label: 'Yatay',
-                    icon: Icons.view_week_outlined,
-                    selected: algorithmLayout == 'Yatay',
-                    onTap: () => onLayoutChanged('Yatay'),
+                    label: 'Laboratuvar Yorumlama Akışı',
+                    icon: Icons.biotech_outlined,
+                    selected: algorithmMode == 'Laboratuvar Yorumlama Akışı',
+                    onTap: () => onModeChanged('Laboratuvar Yorumlama Akışı'),
+                  ),
+                  _SegmentButton(
+                    label: 'TUS Soru Çözüm Akışı',
+                    icon: Icons.psychology_alt_outlined,
+                    selected: algorithmMode == 'TUS Soru Çözüm Akışı',
+                    onTap: () => onModeChanged('TUS Soru Çözüm Akışı'),
+                  ),
+                  _SegmentButton(
+                    label: 'Acil Yaklaşım Algoritması',
+                    icon: Icons.emergency_outlined,
+                    selected: algorithmMode == 'Acil Yaklaşım Algoritması',
+                    onTap: () => onModeChanged('Acil Yaklaşım Algoritması'),
                   ),
                 ],
               ),
               _SettingGridRow(
-                label: 'Detay Seviyesi',
+                label: 'Çıktı formatı',
                 children: [
                   _SegmentButton(
-                    label: 'Basit',
+                    label: 'Akış şeması',
+                    icon: Icons.account_tree_outlined,
+                    selected: algorithmLayout == 'Akış şeması',
+                    onTap: () => onLayoutChanged('Akış şeması'),
+                  ),
+                  _SegmentButton(
+                    label: 'Karar ağacı',
+                    icon: Icons.device_hub_rounded,
+                    selected: algorithmLayout == 'Karar ağacı',
+                    onTap: () => onLayoutChanged('Karar ağacı'),
+                  ),
+                  _SegmentButton(
+                    label: 'Basamaklı algoritma',
+                    icon: Icons.format_list_numbered_rounded,
+                    selected: algorithmLayout == 'Basamaklı algoritma',
+                    onTap: () => onLayoutChanged('Basamaklı algoritma'),
+                  ),
+                ],
+              ),
+              _SettingGridRow(
+                label: 'Çıktı formatı',
+                children: [
+                  _SegmentButton(
+                    label: 'Evet/Hayır dallanması',
+                    icon: Icons.call_split_rounded,
+                    selected: algorithmLayout == 'Evet/Hayır dallanması',
+                    onTap: () => onLayoutChanged('Evet/Hayır dallanması'),
+                  ),
+                  _SegmentButton(
+                    label: 'Mekanizma zinciri',
+                    icon: Icons.link_rounded,
+                    selected: algorithmLayout == 'Mekanizma zinciri',
+                    onTap: () => onLayoutChanged('Mekanizma zinciri'),
+                  ),
+                  _SegmentButton(
+                    label: 'Tablo + akış',
+                    icon: Icons.table_chart_outlined,
+                    selected: algorithmLayout == 'Tablo + akış',
+                    onTap: () => onLayoutChanged('Tablo + akış'),
+                  ),
+                ],
+              ),
+              _SettingGridRow(
+                label: 'Detay seviyesi',
+                children: [
+                  _SegmentButton(
+                    label: 'Kısa',
                     icon: Icons.adjust_rounded,
-                    selected: algorithmDetail == 'Basit',
-                    onTap: () => onDetailChanged('Basit'),
+                    selected: algorithmDetail == 'Kısa',
+                    onTap: () => onDetailChanged('Kısa'),
                   ),
                   _SegmentButton(
-                    label: 'Orta',
+                    label: 'Dengeli',
                     icon: Icons.center_focus_strong_rounded,
-                    selected: algorithmDetail == 'Orta',
-                    onTap: () => onDetailChanged('Orta'),
+                    selected: algorithmDetail == 'Dengeli',
+                    onTap: () => onDetailChanged('Dengeli'),
                   ),
                   _SegmentButton(
-                    label: 'Ayr\u0131nt\u0131l\u0131',
+                    label: 'Detaylı',
                     icon: Icons.format_list_bulleted_rounded,
-                    selected: algorithmDetail == 'Ayr\u0131nt\u0131l\u0131',
-                    onTap: () => onDetailChanged('Ayr\u0131nt\u0131l\u0131'),
+                    selected: algorithmDetail == 'Detaylı',
+                    onTap: () => onDetailChanged('Detaylı'),
+                  ),
+                  _SegmentButton(
+                    label: 'Klinik odaklı',
+                    icon: Icons.local_hospital_outlined,
+                    selected: algorithmDetail == 'Klinik odaklı',
+                    onTap: () => onDetailChanged('Klinik odaklı'),
+                  ),
+                  _SegmentButton(
+                    label: 'Sınav odaklı',
+                    icon: Icons.school_outlined,
+                    selected: algorithmDetail == 'Sınav odaklı',
+                    onTap: () => onDetailChanged('Sınav odaklı'),
                   ),
                 ],
+              ),
+              _SettingGridRow(
+                label: 'Kalite',
+                children: [
+                  _SegmentButton(
+                    label: 'Ekonomik',
+                    icon: Icons.savings_outlined,
+                    selected: algorithmQuality == 'Ekonomik',
+                    onTap: () => onQualityChanged('Ekonomik'),
+                  ),
+                  _SegmentButton(
+                    label: 'Standart',
+                    icon: Icons.check_circle_outline_rounded,
+                    selected: algorithmQuality == 'Standart',
+                    onTap: () => onQualityChanged('Standart'),
+                  ),
+                  _SegmentButton(
+                    label: 'Premium',
+                    icon: Icons.workspace_premium_outlined,
+                    selected: algorithmQuality == 'Premium',
+                    onTap: () => onQualityChanged('Premium'),
+                  ),
+                ],
+              ),
+              if (algorithmQuality == 'Premium') ...[
+                const SizedBox(height: 2),
+                const _BaseNotice(
+                  icon: Icons.payments_outlined,
+                  text:
+                      'Premium kalite daha kapsamlı model rotası kullanabilir ve daha yüksek MC tüketebilir.',
+                ),
+              ],
+              const _BaseNotice(
+                icon: Icons.lock_outline_rounded,
+                text: 'MC tutarı üretim sırasında güvenli şekilde hesaplanır.',
               ),
               _ToggleLine(
-                label: 'Renkli D\xFC\u011F\xFCmler',
+                label: 'Renkli düğümler',
                 initialValue: colorfulNodes,
                 onChanged: onColorfulNodesChanged,
               ),
               _ToggleLine(
-                label: 'Klinik Not Ekle',
+                label: 'Klinik not ve kırmızı bayrak ekle',
                 initialValue: clinicalNotes,
                 onChanged: onClinicalNotesChanged,
               ),
@@ -2479,35 +2779,45 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
         const SizedBox(height: 14),
         const _FlowPreviewPanel(),
         const SizedBox(height: 18),
-        const _ProductionSummary(
+        _ProductionSummary(
           items: [
             _SummaryItemData(
-              Icons.account_tree_outlined,
-              '1',
-              'Algoritma Sayısı',
+              Icons.source_outlined,
+              '$selectedCount',
+              'Seçili kaynak',
               AppColors.blue,
             ),
             _SummaryItemData(
               Icons.polyline_rounded,
-              '18',
-              'Tahmini Düğüm Sayısı',
+              algorithmLayout,
+              'Format',
               AppColors.green,
             ),
             _SummaryItemData(
               Icons.device_hub_rounded,
-              'Tanı Algoritması',
-              'Çıktı Modu',
+              algorithmMode,
+              'Algoritma tipi',
               AppColors.purple,
+            ),
+            _SummaryItemData(
+              Icons.payments_outlined,
+              'Backend',
+              'MC hesaplar',
+              AppColors.orange,
             ),
           ],
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: 'Algoritmayı Oluştur',
+          label: 'Algoritma üret',
           icon: Icons.auto_awesome_rounded,
           height: 58,
-          onTap: onGenerate,
+          onTap: canGenerate ? onGenerate : null,
         ),
+        if (!canGenerate) ...[
+          const SizedBox(height: 8),
+          _SourceRequiredNotice(onPickSources: onPickSources),
+        ],
       ],
     );
   }
@@ -2669,7 +2979,9 @@ class _QueueScreen extends StatelessWidget {
           complete: job.status == _JobUiStatus.completed,
           failed: job.status == _JobUiStatus.failed,
           progress: job.progress,
-          time: job.errorMessage ?? _jobStatusLabel(job.status),
+          time:
+              job.errorMessage ??
+              _baseForceProgressLabel(job.kind, job.status, job.progress),
           filterStatus: _jobStatusLabel(job.status),
           onAction: () {
             if (job.status == _JobUiStatus.completed && job.result != null) {
@@ -2909,8 +3221,12 @@ class _FlashcardResultsScreen extends StatelessWidget {
                 onTap: onRegenerate,
               ),
               _QuickResultAction(
-                icon: Icons.edit_outlined,
-                label: 'Düzenle',
+                icon: current.kind == GeneratedKind.algorithm
+                    ? Icons.source_outlined
+                    : Icons.edit_outlined,
+                label: current.kind == GeneratedKind.algorithm
+                    ? 'Kaynağa\nDön'
+                    : 'Düzenle',
                 color: AppColors.orange,
                 onTap: onEdit,
               ),
@@ -2947,6 +3263,9 @@ class _GeneratedContentView extends StatelessWidget {
         message:
             'AI işi tamamlandı ancak görüntülenecek içerik bulunamadı. Yeniden üretmeyi deneyin.',
       );
+    }
+    if (result.kind == GeneratedKind.algorithm) {
+      return _AlgorithmResultView(result: result);
     }
     if (content is List) {
       return Column(
@@ -3014,6 +3333,565 @@ List<Object?>? _preferredGeneratedList(Map<dynamic, dynamic> content) {
     if (value is List) return value.cast<Object?>();
   }
   return null;
+}
+
+class _AlgorithmResultView extends StatelessWidget {
+  const _AlgorithmResultView({required this.result});
+
+  final _GenerationResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = _algorithmContentMap(result.content);
+    final title = _algorithmText(normalized, const ['title'], result.title);
+    final startingPoint = _algorithmText(normalized, const [
+      'starting_point',
+      'startingPoint',
+      'start',
+      'chief_complaint',
+    ], '');
+    final steps = _algorithmList(normalized, const [
+      'decision_nodes',
+      'decisionNodes',
+      'steps',
+      'nodes',
+      'algorithm_flow',
+      'flow',
+    ]);
+    final branches = _algorithmList(normalized, const [
+      'branches',
+      'yes_no_branches',
+      'edges',
+      'branching',
+    ]);
+    final thresholds = _algorithmList(normalized, const [
+      'critical_thresholds',
+      'criticalThresholds',
+      'thresholds',
+    ]);
+    final redFlags = _algorithmList(normalized, const [
+      'red_flags',
+      'redFlags',
+      'warnings',
+    ]);
+    final actions = _algorithmList(normalized, const [
+      'action_steps',
+      'actionSteps',
+      'management',
+      'outcomes',
+    ]);
+    final examTips = _algorithmList(normalized, const [
+      'exam_tips',
+      'examTips',
+      'clinical_tus_tips',
+      'tips',
+    ]);
+    final notes = _algorithmList(normalized, const ['notes']);
+    final visibleSteps = steps.isNotEmpty
+        ? steps
+        : _algorithmFallbackSteps(result.content);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppColors.navy,
+            fontSize: 22,
+            height: 1.15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _AlgorithmMetaGrid(result: result),
+        if (startingPoint.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _AlgorithmCallout(
+            icon: Icons.play_arrow_rounded,
+            title: 'Başlangıç noktası',
+            text: startingPoint,
+            color: AppColors.blue,
+          ),
+        ],
+        const SizedBox(height: 16),
+        _AlgorithmSection(
+          title: 'Karar düğümleri',
+          icon: Icons.account_tree_outlined,
+          items: visibleSteps,
+          decisionStyle: true,
+        ),
+        if (branches.isNotEmpty)
+          _AlgorithmSection(
+            title: 'Evet/Hayır dalları',
+            icon: Icons.call_split_rounded,
+            items: branches,
+            branchStyle: true,
+          ),
+        if (thresholds.isNotEmpty)
+          _AlgorithmSection(
+            title: 'Kritik eşikler',
+            icon: Icons.speed_rounded,
+            items: thresholds,
+            color: AppColors.orange,
+          ),
+        if (redFlags.isNotEmpty)
+          _AlgorithmSection(
+            title: 'Kırmızı bayraklar',
+            icon: Icons.warning_amber_rounded,
+            items: redFlags,
+            color: AppColors.red,
+          ),
+        if (actions.isNotEmpty)
+          _AlgorithmSection(
+            title: 'Sonuç / eylem adımları',
+            icon: Icons.checklist_rounded,
+            items: actions,
+            color: AppColors.green,
+          ),
+        if (examTips.isNotEmpty)
+          _AlgorithmSection(
+            title: 'Sınavda yakala',
+            icon: Icons.school_outlined,
+            items: examTips,
+            color: AppColors.purple,
+          ),
+        if (notes.isNotEmpty)
+          _AlgorithmSection(
+            title: 'Klinik notlar',
+            icon: Icons.edit_note_rounded,
+            items: notes,
+          ),
+      ],
+    );
+  }
+}
+
+class _AlgorithmMetaGrid extends StatelessWidget {
+  const _AlgorithmMetaGrid({required this.result});
+
+  final _GenerationResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      ('Kaynak', result.sourceTitle),
+      ('Üretim tarihi', result.createdAtLabel ?? 'Bugün'),
+      ('Tip', result.algorithmType ?? 'Algoritma'),
+      ('Format', result.outputFormat ?? 'Akış şeması'),
+      ('Detay', result.detailLevel ?? 'Dengeli'),
+      ('Kalite', result.qualityTier ?? 'Standart'),
+      ('MC', result.mcCostLabel ?? 'MC tutarı güvenli hesaplanır'),
+    ];
+    return _ResponsiveGrid(
+      minItemWidth: 155,
+      children: [
+        for (final item in items)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FBFF),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.$1,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  item.$2,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13.5,
+                    height: 1.18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AlgorithmSection extends StatelessWidget {
+  const _AlgorithmSection({
+    required this.title,
+    required this.icon,
+    required this.items,
+    this.color = AppColors.blue,
+    this.decisionStyle = false,
+    this.branchStyle = false,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<Object?> items;
+  final Color color;
+  final bool decisionStyle;
+  final bool branchStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: color.withValues(alpha: .12),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(title, style: _titleStyle)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < items.length; i++)
+            _AlgorithmNodeCard(
+              index: i + 1,
+              value: items[i],
+              color: color,
+              decisionStyle: decisionStyle,
+              branchStyle: branchStyle,
+              showConnector: i != items.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AlgorithmNodeCard extends StatelessWidget {
+  const _AlgorithmNodeCard({
+    required this.index,
+    required this.value,
+    required this.color,
+    required this.showConnector,
+    this.decisionStyle = false,
+    this.branchStyle = false,
+  });
+
+  final int index;
+  final Object? value;
+  final Color color;
+  final bool showConnector;
+  final bool decisionStyle;
+  final bool branchStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = _algorithmItemParts(value);
+    final nodeIcon = branchStyle
+        ? Icons.call_split_rounded
+        : decisionStyle
+        ? Icons.device_hub_rounded
+        : Icons.arrow_forward_rounded;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            CircleAvatar(
+              radius: 17,
+              backgroundColor: color,
+              child: Text(
+                '$index',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            if (showConnector)
+              Container(
+                width: 2,
+                height: 32,
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                color: color.withValues(alpha: .28),
+              ),
+          ],
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            margin: EdgeInsets.only(bottom: showConnector ? 6 : 0),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .07),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: .18)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(nodeIcon, color: color, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        parsed.title,
+                        style: const TextStyle(
+                          color: AppColors.navy,
+                          fontSize: 15.5,
+                          height: 1.25,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (parsed.body.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    parsed.body,
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 14.5,
+                      height: 1.42,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                if (parsed.children.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  for (final child in parsed.children)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 5),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.subdirectory_arrow_right_rounded,
+                            color: color,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              child,
+                              style: const TextStyle(
+                                color: AppColors.navy,
+                                fontSize: 13.5,
+                                height: 1.32,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AlgorithmCallout extends StatelessWidget {
+  const _AlgorithmCallout({
+    required this.icon,
+    required this.title,
+    required this.text,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: .18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 14.5,
+                    height: 1.38,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AlgorithmItemParts {
+  const _AlgorithmItemParts({
+    required this.title,
+    required this.body,
+    required this.children,
+  });
+
+  final String title;
+  final String body;
+  final List<String> children;
+}
+
+Map<dynamic, dynamic> _algorithmContentMap(Object? content) {
+  if (content is Map) return content;
+  if (content is String) {
+    final text = content.trim();
+    if (text.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map) return decoded;
+      } catch (_) {
+        return const {};
+      }
+    }
+  }
+  return const {};
+}
+
+String _algorithmText(
+  Map<dynamic, dynamic> map,
+  List<String> keys,
+  String fallback,
+) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  return fallback;
+}
+
+List<Object?> _algorithmList(Map<dynamic, dynamic> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is List && value.isNotEmpty) return value.cast<Object?>();
+    if (value is String && value.trim().isNotEmpty) return [value.trim()];
+  }
+  return const [];
+}
+
+List<Object?> _algorithmFallbackSteps(Object? content) {
+  if (content is List) return content.cast<Object?>();
+  if (content is String && content.trim().isNotEmpty) return [content.trim()];
+  return const ['Karar akışı üretildi ancak yapılandırılmış düğüm bulunamadı.'];
+}
+
+_AlgorithmItemParts _algorithmItemParts(Object? value) {
+  if (value is Map) {
+    final title = _firstNonEmpty(value, const [
+      'title',
+      'label',
+      'question',
+      'decision',
+      'step',
+      'name',
+    ]);
+    final body = _firstNonEmpty(value, const [
+      'description',
+      'body',
+      'rationale',
+      'action',
+      'answer',
+      'next',
+    ]);
+    final children = <String>[];
+    for (final key in const ['substeps', 'children', 'yes', 'no', 'options']) {
+      final item = value[key];
+      if (item is List) {
+        children.addAll(item.map(_algorithmInlineText).where((e) => e != '-'));
+      } else if (item != null) {
+        final text = _algorithmInlineText(item);
+        if (text != '-') children.add('${key.toUpperCase()}: $text');
+      }
+    }
+    return _AlgorithmItemParts(
+      title: title.isEmpty ? _algorithmInlineText(value) : title,
+      body: body,
+      children: children,
+    );
+  }
+  final text = _algorithmInlineText(value);
+  return _AlgorithmItemParts(title: text, body: '', children: const []);
+}
+
+String _firstNonEmpty(Map<dynamic, dynamic> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    if (value is num) return value.toString();
+  }
+  return '';
+}
+
+String _algorithmInlineText(Object? value) {
+  if (value == null) return '-';
+  if (value is String) {
+    final text = value.trim();
+    return text.isEmpty ? '-' : text;
+  }
+  if (value is num || value is bool) return value.toString();
+  if (value is List) {
+    return value.map(_algorithmInlineText).where((e) => e != '-').join(' | ');
+  }
+  if (value is Map) {
+    final pieces = <String>[];
+    for (final entry in value.entries) {
+      final key = entry.key.toString();
+      if (key == 'stepNumber') continue;
+      final text = _algorithmInlineText(entry.value);
+      if (text != '-') pieces.add(text);
+    }
+    return pieces.isEmpty ? '-' : pieces.join(' - ');
+  }
+  final text = value.toString().trim();
+  return text.isEmpty ? '-' : text;
 }
 
 class _GeneratedItemCard extends StatelessWidget {
@@ -5706,6 +6584,45 @@ class _CalloutBox extends StatelessWidget {
               color: AppColors.navy,
               fontSize: 14.5,
               height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BaseNotice extends StatelessWidget {
+  const _BaseNotice({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.selectedBlue.withValues(alpha: .72),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.blue.withValues(alpha: .18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.blue, size: 20),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppColors.navy,
+                fontSize: 13.5,
+                height: 1.32,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

@@ -15,6 +15,12 @@ class SourceBaseAuthConfig {
     'SOURCEBASE_PUBLIC_URL',
     defaultValue: 'http://localhost:8088',
   );
+  static const googleOAuthEnabled = bool.fromEnvironment(
+    'SOURCEBASE_GOOGLE_OAUTH_ENABLED',
+  );
+  static const appleOAuthEnabled = bool.fromEnvironment(
+    'SOURCEBASE_APPLE_OAUTH_ENABLED',
+  );
 
   static String get supabaseAnonKey =>
       _supabaseAnonKey.isNotEmpty ? _supabaseAnonKey : _supabasePublicToken;
@@ -74,6 +80,8 @@ class SourceBaseAuthBackend {
   static bool get isConfigured => SourceBaseAuthConfig.isConfigured;
   static bool get isInitialized => _initialized;
   static String? get initializationError => _initializationError;
+  static bool get googleOAuthEnabled => SourceBaseAuthConfig.googleOAuthEnabled;
+  static bool get appleOAuthEnabled => SourceBaseAuthConfig.appleOAuthEnabled;
 
   static SupabaseClient? get client {
     if (!_initialized) {
@@ -163,6 +171,9 @@ class SourceBaseAuthBackend {
   }
 
   static Future<AuthActionResult> signInWithGoogle() async {
+    if (!googleOAuthEnabled) {
+      throw const AuthException('Bu giriş yöntemi şu anda aktif değil.');
+    }
     final auth = _authOrThrow();
     await auth.signInWithOAuth(
       OAuthProvider.google,
@@ -172,6 +183,9 @@ class SourceBaseAuthBackend {
   }
 
   static Future<AuthActionResult> signInWithApple() async {
+    if (!appleOAuthEnabled) {
+      throw const AuthException('Bu giriş yöntemi şu anda aktif değil.');
+    }
     final auth = _authOrThrow();
     await auth.signInWithOAuth(
       OAuthProvider.apple,
@@ -332,6 +346,11 @@ class SourceBaseAuthBackend {
           message.contains('too many') ||
           code.contains('over_email_send_rate_limit')) {
         return 'Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar dene.';
+      }
+      if (message.contains('giriş yöntemi') ||
+          message.contains('unsupported provider') ||
+          message.contains('provider is not enabled')) {
+        return 'Bu giriş yöntemi şu anda aktif değil.';
       }
       if (message.contains('otp') ||
           message.contains('token') ||

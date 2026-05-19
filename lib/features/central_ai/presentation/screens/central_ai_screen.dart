@@ -331,7 +331,13 @@ class _ContextPanel extends StatelessWidget {
                 text:
                     'Drive’da seçilebilir kaynak yok. Dosya yükledikten sonra bağlam seçilebilir.',
               )
-            else
+            else ...[
+              const _ContextNotice(
+                icon: Icons.verified_outlined,
+                text:
+                    'Merkezi AI yalnızca işlenmesi tamamlanmış Drive kaynaklarını modele bağlar.',
+              ),
+              const SizedBox(height: 12),
               SizedBox(
                 height: 104,
                 child: ListView.separated(
@@ -353,6 +359,7 @@ class _ContextPanel extends StatelessWidget {
                   },
                 ),
               ),
+            ],
           ],
         ),
       ),
@@ -499,10 +506,9 @@ class _ChatBubble extends StatelessWidget {
                   color: AppColors.selectedBlue,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.psychology_rounded,
-                  color: AppColors.blue,
-                  size: 22,
+                child: const Padding(
+                  padding: EdgeInsets.all(7),
+                  child: SourceBaseMark(size: 24),
                 ),
               ),
               const SizedBox(width: 12),
@@ -577,7 +583,7 @@ class _AiInputArea extends StatelessWidget {
       SnackBar(
         content: Text(
           hasContext
-              ? 'Seçili Drive kaynakları bu sohbete bağlandı.'
+              ? 'Hazır durumdaki seçili Drive kaynakları bu sohbete bağlandı.'
               : 'Drive bağlamı için üstteki kaynak kartlarından dosya seçin.',
         ),
         behavior: SnackBarBehavior.floating,

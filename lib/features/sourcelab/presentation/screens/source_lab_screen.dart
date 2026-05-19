@@ -80,9 +80,6 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
   String podcastFocus = '';
   double podcastPace = .5;
   bool includeMiniQuiz = true;
-  bool podcastPlaying = false;
-  double podcastPosition = 0;
-
   String infographicType = 'Klinik Akış';
   String infographicStyle = 'Akademik';
   String infographicDensity = 'Dengeli';
@@ -337,7 +334,9 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
   }
 
   void _unsupportedExport() {
-    _toast('Dışa aktarma/paylaşma entegrasyonu bu sürümde bağlı değil.');
+    _toast(
+      'Dışa aktarma ve paylaşma bu sürümde bağlı değil. İçeriği metin olarak kopyalayabilirsiniz.',
+    );
   }
 
   Future<void> _copyLabResult() async {
@@ -652,34 +651,15 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                     _generate(SourceLabView.podcastResult, _ToolKind.podcast),
               ),
               SourceLabView.podcastResult => _PodcastResult(
-                playing: podcastPlaying,
-                position: podcastPosition,
                 loading: _isLoading,
                 result: _labResult,
                 error: _labError,
                 onBack: _back,
-                onTogglePlay: () => _toast(
-                  'Ses dosyası üretilmedi; metinsel podcast scripti gösteriliyor.',
-                ),
-                onPosition: (value) => setState(() => podcastPosition = value),
-                onSpeed: _unsupportedExport,
-                onShare: _copyLabResult,
                 onExport: _copyLabResult,
                 onRegenerate: () => _open(SourceLabView.podcastBuilder),
                 onSave: () {
                   _saveLabResult();
                 },
-                onSkipBack: () {
-                  setState(() {
-                    podcastPosition = math.max(0, podcastPosition - .08);
-                  });
-                },
-                onSkipForward: () {
-                  setState(() {
-                    podcastPosition = math.min(1, podcastPosition + .08);
-                  });
-                },
-                onVolume: _unsupportedExport,
               ),
               SourceLabView.infographicBuilder => _InfographicBuilder(
                 selectedSources: selectedSources,
@@ -711,7 +691,6 @@ class _SourceLabScreenState extends State<SourceLabScreen> {
                   _saveLabResult();
                 },
                 onPng: () => _toast('Görsel önizleme ekranda açık.'),
-                onPdf: _unsupportedExport,
                 onRegenerate: () => _open(SourceLabView.infographicBuilder),
               ),
               SourceLabView.mindMapBuilder => _MindMapBuilder(
@@ -1866,7 +1845,7 @@ class _SmartSuggestionsPanel extends StatelessWidget {
           _SuggestionRow(
             icon: Icons.keyboard_voice_outlined,
             color: AppColors.blue,
-            text: 'Ders notlarını podcast formatında dinleyebilirsin.',
+            text: 'Ders notlarından podcast scripti oluşturabilirsin.',
             onTap: () => onOpenTool(_ToolKind.podcast),
           ),
         ],
@@ -2243,9 +2222,8 @@ class _ClinicalScenarioResult extends StatelessWidget {
                     onTap: onSave,
                   ),
                   _SecondaryLabButton(
-                    label: 'PDF Olarak Dışa Aktar',
-                    icon: Icons.picture_as_pdf_outlined,
-                    iconColor: AppColors.red,
+                    label: 'Metni kopyala',
+                    icon: Icons.content_copy_rounded,
                     onTap: onExport,
                   ),
                   _SecondaryLabButton(
@@ -2590,14 +2568,13 @@ class _LearningPlanResult extends StatelessWidget {
         _ResponsiveActions(
           children: [
             _SecondaryLabButton(
-              label: 'Takvime Ekle',
+              label: 'Takvim yakında',
               icon: Icons.calendar_today_outlined,
               onTap: onCalendar,
             ),
             _SecondaryLabButton(
-              label: 'PDF Dışa Aktar',
-              icon: Icons.picture_as_pdf_outlined,
-              iconColor: AppColors.red,
+              label: 'Metni kopyala',
+              icon: Icons.content_copy_rounded,
               onTap: onExport,
             ),
             _SecondaryLabButton(
@@ -2663,7 +2640,7 @@ class _PodcastBuilder extends StatelessWidget {
         _LabHero(
           title: 'Podcast Özeti',
           subtitle:
-              'Kaynaklarını dinlenebilir, akıcı ve\nsınav odaklı ses özetlerine dönüştür.',
+              'Kaynaklarını akıcı, sınav odaklı\nmetinsel podcast scriptine dönüştür.',
           art: _HeroArtKind.podcast,
           chips: const [
             _MiniHeroChip(icon: Icons.waves_rounded, label: 'Akıcı'),
@@ -2765,10 +2742,13 @@ class _PodcastBuilder extends StatelessWidget {
                 title: 'Bölüm Önizleme',
                 trailing: InkWell(
                   onTap: () =>
-                      _showLabSnack(context, 'Önizleme sesi oynatılıyor.'),
+                      _showLabSnack(
+                        context,
+                        'Ses önizlemesi bağlı değil; metinsel bölüm akışı gösteriliyor.',
+                      ),
                   child: const _InfoPill(
-                    label: 'Önizlemeyi Dinle',
-                    icon: Icons.play_arrow_rounded,
+                    label: 'Script Önizleme',
+                    icon: Icons.article_outlined,
                   ),
                 ),
               ),
@@ -2792,40 +2772,22 @@ class _PodcastBuilder extends StatelessWidget {
 
 class _PodcastResult extends StatelessWidget {
   const _PodcastResult({
-    required this.playing,
-    required this.position,
     required this.loading,
     required this.result,
     required this.error,
     required this.onBack,
-    required this.onTogglePlay,
-    required this.onPosition,
-    required this.onSpeed,
-    required this.onShare,
     required this.onExport,
     required this.onRegenerate,
     required this.onSave,
-    required this.onSkipBack,
-    required this.onSkipForward,
-    required this.onVolume,
   });
 
-  final bool playing;
-  final double position;
   final bool loading;
   final _LabGenerationResult? result;
   final String? error;
   final VoidCallback onBack;
-  final VoidCallback onTogglePlay;
-  final ValueChanged<double> onPosition;
-  final VoidCallback onSpeed;
-  final VoidCallback onShare;
   final VoidCallback onExport;
   final VoidCallback onRegenerate;
   final VoidCallback onSave;
-  final VoidCallback onSkipBack;
-  final VoidCallback onSkipForward;
-  final VoidCallback onVolume;
 
   @override
   Widget build(BuildContext context) {
@@ -2840,15 +2802,17 @@ class _PodcastResult extends StatelessWidget {
         onSave: onSave,
         onExport: onExport,
         onRegenerate: onRegenerate,
+        exportLabel: 'Metni kopyala',
         audioNotice:
-            'Backend metinsel podcast scripti döndürüyor; gerçek ses dosyası/oynatıcı entegrasyonu bağlı değil.',
+            'Bu çıktı metinsel podcast scriptidir. Gerçek ses dosyası ve oynatıcı entegrasyonu bu sürümde bağlı değil.',
       );
     }
     return _LabScroll(
       children: [
         _MinimalTopBar(
           title: 'Podcast Özeti',
-          subtitle: 'Oluşturulan ses özetini dinle, bölümlere atla ve kaydet.',
+          subtitle:
+              'Oluşturulan metinsel podcast scriptini incele ve koleksiyona kaydet.',
           onBack: onBack,
         ),
         _LabPanel(
@@ -2864,10 +2828,15 @@ class _PodcastResult extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(34, 32, 34, 28),
           child: Column(
             children: [
-              SizedBox(height: 108, child: _Waveform(progress: position)),
+              const _LabNotice(
+                text:
+                    'Bu sürüm gerçek ses dosyası üretmez. Kontroller önizleme amaçlı kapalıdır; çıktıyı metin script olarak kullanabilirsiniz.',
+              ),
+              const SizedBox(height: 18),
+              const SizedBox(height: 108, child: _Waveform(progress: 0)),
               Slider(
-                value: position,
-                onChanged: onPosition,
+                value: 0,
+                onChanged: null,
                 activeColor: AppColors.purple,
                 inactiveColor: AppColors.line,
               ),
@@ -2890,17 +2859,17 @@ class _PodcastResult extends StatelessWidget {
                 spacing: 16,
                 runSpacing: 16,
                 children: [
-                  _ControlButton(label: '1.0x', onTap: onSpeed),
+                  const _ControlButton(label: '1.0x', onTap: null),
                   _CircleControl(
                     icon: Icons.replay_10_rounded,
-                    onTap: onSkipBack,
+                    onTap: null,
                   ),
-                  _PlayButton(playing: playing, onTap: onTogglePlay),
+                  const _PlayButton(playing: false, onTap: null),
                   _CircleControl(
                     icon: Icons.forward_10_rounded,
-                    onTap: onSkipForward,
+                    onTap: null,
                   ),
-                  _VolumeControl(onTap: onVolume),
+                  const _VolumeControl(onTap: null),
                 ],
               ),
             ],
@@ -2914,15 +2883,15 @@ class _PodcastResult extends StatelessWidget {
         _ResponsiveActions(
           children: [
             _SecondaryLabButton(
-              label: 'Paylaş',
+              label: 'Paylaşma yakında',
               icon: Icons.share_outlined,
-              onTap: onShare,
+              onTap: null,
               height: 64,
             ),
             _SecondaryLabButton(
-              label: 'MP3 Dışa Aktar',
+              label: 'MP3 yakında',
               icon: Icons.file_download_outlined,
-              onTap: onExport,
+              onTap: null,
               height: 64,
             ),
             _SecondaryLabButton(
@@ -2934,7 +2903,7 @@ class _PodcastResult extends StatelessWidget {
           ],
         ),
         _PrimaryLabButton(
-          label: 'Podcasti Kaydet',
+          label: 'Scripti Kaydet',
           icon: Icons.bookmark_border_rounded,
           onTap: onSave,
           height: 76,
@@ -4109,7 +4078,6 @@ class _InfographicResult extends StatelessWidget {
     required this.onSearch,
     required this.onSave,
     required this.onPng,
-    required this.onPdf,
     required this.onRegenerate,
   });
 
@@ -4120,7 +4088,6 @@ class _InfographicResult extends StatelessWidget {
   final VoidCallback onSearch;
   final VoidCallback onSave;
   final VoidCallback onPng;
-  final VoidCallback onPdf;
   final VoidCallback onRegenerate;
 
   @override
@@ -4133,7 +4100,6 @@ class _InfographicResult extends StatelessWidget {
         onBack: onBack,
         onSave: onSave,
         onView: onPng,
-        onShare: onPdf,
         onRegenerate: onRegenerate,
       );
     }
@@ -4187,16 +4153,16 @@ class _InfographicResult extends StatelessWidget {
               height: 64,
             ),
             _SecondaryLabButton(
-              label: 'PNG Dışa Aktar',
+              label: 'Görseli görüntüle',
               icon: Icons.image_outlined,
               onTap: onPng,
               height: 64,
             ),
             _SecondaryLabButton(
-              label: 'PDF Dışa Aktar',
+              label: 'PDF yakında',
               icon: Icons.picture_as_pdf_outlined,
               iconColor: AppColors.red,
-              onTap: onPdf,
+              onTap: null,
               height: 64,
             ),
             _SecondaryLabButton(
@@ -4462,8 +4428,8 @@ class _MindMapResult extends StatelessWidget {
         _ResponsiveActions(
           children: [
             _SecondaryLabButton(
-              label: 'Haritayı Dışa Aktar',
-              icon: Icons.file_download_outlined,
+              label: 'Haritayı kopyala',
+              icon: Icons.content_copy_rounded,
               onTap: onExport,
               height: 64,
             ),
@@ -4849,7 +4815,6 @@ class _InfographicGeneratedResult extends StatelessWidget {
     required this.onBack,
     required this.onSave,
     required this.onView,
-    required this.onShare,
     required this.onRegenerate,
   });
 
@@ -4859,7 +4824,6 @@ class _InfographicGeneratedResult extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onSave;
   final VoidCallback onView;
-  final VoidCallback onShare;
   final VoidCallback onRegenerate;
 
   @override
@@ -4916,9 +4880,9 @@ class _InfographicGeneratedResult extends StatelessWidget {
                 onTap: onRegenerate,
               ),
               _SecondaryLabButton(
-                label: 'İndir / paylaş',
+                label: 'İndir / paylaş yakında',
                 icon: Icons.ios_share_rounded,
-                onTap: onShare,
+                onTap: null,
               ),
             ],
           )
@@ -7823,7 +7787,7 @@ class _HeroArtPainter extends CustomPainter {
         canvas.drawLine(center, node, line..strokeWidth = 2);
       }
       canvas.drawCircle(center, 42, blue);
-      _drawIcon(canvas, center, Icons.psychology_outlined, Colors.white, 31);
+      _drawIcon(canvas, center, Icons.account_tree_outlined, Colors.white, 31);
       for (var i = 0; i < nodes.length; i++) {
         canvas.drawCircle(
           nodes[i],
@@ -8077,20 +8041,23 @@ class _SecondaryLabButton extends StatelessWidget {
 
   final String label;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Color iconColor;
   final double height;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return SizedBox(
       height: height,
       child: OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.navy,
-          side: const BorderSide(color: AppColors.line),
-          backgroundColor: Colors.white,
+          foregroundColor: enabled ? AppColors.navy : AppColors.muted,
+          side: BorderSide(
+            color: enabled ? AppColors.line : AppColors.softLine,
+          ),
+          backgroundColor: enabled ? Colors.white : const Color(0xFFF6F8FC),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -8101,7 +8068,11 @@ class _SecondaryLabButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: iconColor, size: 24),
+              Icon(
+                icon,
+                color: enabled ? iconColor : AppColors.softText,
+                size: 24,
+              ),
               const SizedBox(width: 10),
               Text(label),
             ],
@@ -10607,16 +10578,20 @@ class _ControlButton extends StatelessWidget {
   const _ControlButton({required this.label, required this.onTap});
 
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return OutlinedButton(
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
         fixedSize: const Size(78, 58),
-        foregroundColor: AppColors.blue,
-        side: const BorderSide(color: AppColors.line),
+        foregroundColor: enabled ? AppColors.blue : AppColors.softText,
+        side: BorderSide(
+          color: enabled ? AppColors.line : AppColors.softLine,
+        ),
+        backgroundColor: enabled ? Colors.white : const Color(0xFFF6F8FC),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       child: Text(
@@ -10631,13 +10606,17 @@ class _CircleControl extends StatelessWidget {
   const _CircleControl({required this.icon, required this.onTap});
 
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onTap,
-      icon: Icon(icon, color: AppColors.navy, size: 48),
+      icon: Icon(
+        icon,
+        color: onTap == null ? AppColors.softText : AppColors.navy,
+        size: 48,
+      ),
     );
   }
 }
@@ -10646,19 +10625,24 @@ class _PlayButton extends StatelessWidget {
   const _PlayButton({required this.playing, required this.onTap});
 
   final bool playing;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return InkWell(
       onTap: onTap,
       customBorder: const CircleBorder(),
       child: Container(
         width: 108,
         height: 108,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: LinearGradient(colors: [AppColors.blue, AppColors.purple]),
+          gradient: enabled
+              ? const LinearGradient(colors: [AppColors.blue, AppColors.purple])
+              : const LinearGradient(
+                  colors: [Color(0xFFCAD4E4), Color(0xFFB8C4D6)],
+                ),
         ),
         child: Icon(
           playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
@@ -10673,7 +10657,7 @@ class _PlayButton extends StatelessWidget {
 class _VolumeControl extends StatelessWidget {
   const _VolumeControl({required this.onTap});
 
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

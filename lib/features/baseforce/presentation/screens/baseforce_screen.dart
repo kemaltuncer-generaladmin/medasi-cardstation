@@ -160,7 +160,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
   }
 
   void _honestToast() {
-    _toast('Bu aksiyon için entegrasyon bu sürümde bağlı değil.');
+    _toast(
+      'Önizleme temsili gösterilir. Kaydedilebilir içerik için üretimi başlatın.',
+    );
   }
 
   void _uploadGuidanceToast() {
@@ -260,12 +262,23 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
   }
 
   DriveFile? _selectedFile() {
+    final readyFiles = _selectedReadyFiles();
+    return readyFiles.isEmpty ? null : readyFiles.first;
+  }
+
+  List<DriveFile> _selectedReadyFiles() {
     for (final file in widget.data.recentFiles) {
-      if (selectedSources.contains(file.id) && _isBaseForceReadySource(file)) {
-        return file;
+      if (selectedSources.contains(file.id) && !_isBaseForceReadySource(file)) {
+        selectedSources.remove(file.id);
       }
     }
-    return null;
+    return widget.data.recentFiles
+        .where(
+          (file) =>
+              selectedSources.contains(file.id) &&
+              _isBaseForceReadySource(file),
+        )
+        .toList();
   }
 
   DriveFile? _fileById(String id) {
@@ -417,6 +430,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
     }
 
     final jobType = _baseForceJobType(kind);
+    final readySourceIds = _selectedReadyFiles().map((file) => file.id).toList();
     final job = _BaseForceJobState(
       localId: DateTime.now().microsecondsSinceEpoch.toString(),
       kind: kind,
@@ -432,7 +446,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
       final createResponse = await _api.createGenerationJob(
         fileId: file.id,
         jobType: jobType,
-        sourceIds: selectedSources.toList(),
+        sourceIds: readySourceIds.isEmpty ? [file.id] : readySourceIds,
         count: _generationCount(kind),
         qualityTier: _qualityTierFor(kind),
         options: _generationOptionsFor(kind),
@@ -744,7 +758,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
                 return;
               }
               _toast(
-                'Düzenleme entegrasyonu bağlı değil; yeni sürüm için Yeniden Üret kullanın.',
+                'Bu sürümde düzenleme yerine ayarları güncelleyip Yeniden Üret ile devam edin.',
               );
             },
           ),
@@ -859,7 +873,7 @@ String _baseForceJobType(GeneratedKind kind) {
     GeneratedKind.comparison || GeneratedKind.table => 'comparison',
     GeneratedKind.podcast => 'podcast',
     GeneratedKind.infographic => 'infographic',
-    GeneratedKind.mindMap => 'algorithm',
+    GeneratedKind.mindMap => 'mind_map',
   };
 }
 
@@ -1307,10 +1321,9 @@ class _BaseForcePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.sizeOf(context).width < 600;
-    final horizontalPadding = MediaQuery.sizeOf(context).width < 390
-        ? 16.0
-        : 32.0;
+    final width = MediaQuery.sizeOf(context).width;
+    final isMobile = width < 600;
+    final horizontalPadding = isMobile ? (width < 390 ? 14.0 : 16.0) : 32.0;
     final topPadding = MediaQuery.viewPaddingOf(context).top + 12;
     final bottomPadding = isMobile
         ? SourceBaseBottomNav.scrollEndPadding(context)
@@ -2047,7 +2060,7 @@ class _SourcePickerScreen extends StatelessWidget {
           icon: Icons.change_history_rounded,
           onTap: () => _showBaseForceToast(
             context,
-            'Bu \xF6zellik hen\xFCz haz\u0131r de\u011Fil.',
+            'Drive kaynakları aşağıdaki listede gösteriliyor. Üretim için hazır rozetli kaynakları seçin.',
           ),
         ),
         _HeroAction(
@@ -2070,7 +2083,7 @@ class _SourcePickerScreen extends StatelessWidget {
             _FilterButton(
               onTap: () => _showBaseForceToast(
                 context,
-                'Bu \xF6zellik hen\xFCz haz\u0131r de\u011Fil.',
+                'Filtreleme bu sürümde tüm kaynaklar görünümünde. Hazır rozetli kaynaklar üretime alınabilir.',
               ),
             ),
           ],
@@ -5647,7 +5660,7 @@ class _SourceFilter extends StatelessWidget {
     return InkWell(
       onTap: () => _showBaseForceToast(
         context,
-        'Bu \xF6zellik hen\xFCz haz\u0131r de\u011Fil.',
+        'Filtreleme bu sürümde tüm kaynaklar görünümünde. Hazır rozetli kaynaklar üretime alınabilir.',
       ),
       borderRadius: BorderRadius.circular(18),
       child: Container(
@@ -6466,7 +6479,7 @@ class _SegmentButton extends StatelessWidget {
           onTap ??
           () => _showBaseForceToast(
             context,
-            'Bu \xF6zellik hen\xFCz haz\u0131r de\u011Fil.',
+            'Bu seçenek bu sürümde pasif. Üretim, ekranda seçili ayarlarla başlatılır.',
           ),
       borderRadius: BorderRadius.circular(9),
       child: Container(
@@ -6945,7 +6958,7 @@ class _TagChip extends StatelessWidget {
     return InkWell(
       onTap: () => _showBaseForceToast(
         context,
-        'Bu ayar üretim isteğine backend desteği geldikten sonra bağlanacak.',
+        'Alan etiketleri bu sürümde önizleme amaçlıdır. Üretim; soru tipi, zorluk ve açıklama ayarlarını kullanır.',
       ),
       borderRadius: BorderRadius.circular(18),
       child: Container(
@@ -9117,7 +9130,7 @@ class _MoreMenuButton extends StatelessWidget {
       tooltip: 'Diğer işlemler',
       onPressed: () => _showBaseForceToast(
         context,
-        'Ek üretim işlemleri backend desteği geldikten sonra bağlanacak.',
+        'Ek işlemler bu sürümde kaynak seçimi ve yeniden üretim akışları üzerinden yönetilir.',
       ),
       icon: Icon(Icons.more_vert_rounded, color: color),
       visualDensity: VisualDensity.compact,

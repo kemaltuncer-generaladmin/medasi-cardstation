@@ -694,7 +694,7 @@ class StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = switch (status) {
-      DriveItemStatus.completed => 'Tamamlandı',
+      DriveItemStatus.completed => 'Hazır',
       DriveItemStatus.processing => 'İşleniyor',
       DriveItemStatus.uploading => 'Yükleniyor',
       DriveItemStatus.failed => 'Hata',

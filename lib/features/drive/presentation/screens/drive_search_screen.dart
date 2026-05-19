@@ -175,7 +175,7 @@ class _DriveSearchScreenState extends State<DriveSearchScreen> {
               ),
               _StatusChip(
                 icon: Icons.check_circle_rounded,
-                label: 'Tamamlandı',
+                label: 'Hazır',
                 color: AppColors.green,
                 status: DriveItemStatus.completed,
                 selectedStatus: _status,
@@ -300,7 +300,7 @@ class _DriveSearchScreenState extends State<DriveSearchScreen> {
         value: _status,
         options: const [
           _Choice(null, 'Tümü'),
-          _Choice(DriveItemStatus.completed, 'Tamamlandı'),
+          _Choice(DriveItemStatus.completed, 'Hazır'),
           _Choice(DriveItemStatus.processing, 'İşleniyor'),
           _Choice(DriveItemStatus.uploading, 'Yükleniyor'),
           _Choice(DriveItemStatus.failed, 'Hata'),
@@ -704,6 +704,19 @@ class _SearchResult extends StatelessWidget {
                       fontSize: 14,
                     ),
                   ),
+                  if (file.statusMessage != null &&
+                      file.status != DriveItemStatus.completed) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      file.statusMessage!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -809,7 +822,7 @@ String _kindLabel(DriveFileKind? kind) {
 String _statusLabel(DriveItemStatus? status) {
   return switch (status) {
     null => 'Tümü',
-    DriveItemStatus.completed => 'Tamamlandı',
+    DriveItemStatus.completed => 'Hazır',
     DriveItemStatus.processing => 'İşleniyor',
     DriveItemStatus.uploading => 'Yükleniyor',
     DriveItemStatus.failed => 'Hata',

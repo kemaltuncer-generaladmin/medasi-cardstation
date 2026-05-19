@@ -266,13 +266,14 @@ DriveFile _fileFromRow(
   final id = _text(row['id']);
   final status = _fileStatusFromRow(row);
   final pageCount = _int(row['page_count']);
+  final sizeBytes = _int(row['size_bytes']);
   return DriveFile(
     id: id,
     title: _text(row['title'], fallback: _text(row['original_filename'])),
     kind: _kindFromText(
       _text(row['file_type'], fallback: _text(row['mime_type'])),
     ),
-    sizeLabel: _sizeLabel(_int(row['size_bytes'])),
+    sizeLabel: _sizeLabel(sizeBytes),
     pageLabel: _pageLabelForFile(status, pageCount),
     updatedLabel: _dateLabel(
       _text(row['updated_at'], fallback: _text(row['created_at'])),
@@ -280,6 +281,7 @@ DriveFile _fileFromRow(
     courseTitle: courseTitle,
     sectionTitle: sectionTitle,
     status: status,
+    statusMessage: _fileStatusMessage(row, status, sizeBytes),
     generated: allOutputs
         .where((output) => _text(output['source_file_id']) == id)
         .map(_outputFromRow)
@@ -381,7 +383,7 @@ DriveItemStatus _statusFromText(String status) {
     'uploading' => DriveItemStatus.uploading,
     'failed' || 'error' => DriveItemStatus.failed,
     'draft' => DriveItemStatus.draft,
-    _ => DriveItemStatus.completed,
+    _ => DriveItemStatus.draft,
   };
 }
 
@@ -405,6 +407,61 @@ String _pageLabelForFile(DriveItemStatus status, int pageCount) {
     DriveItemStatus.failed => 'İşlenemedi',
     DriveItemStatus.draft => 'Taslak',
   };
+}
+
+String? _fileStatusMessage(
+  Map<String, dynamic> row,
+  DriveItemStatus status,
+  int sizeBytes,
+) {
+  if (status == DriveItemStatus.completed) {
+    return 'Kaynak üretime hazır.';
+  }
+  if (sizeBytes <= 0) {
+    return 'Dosya boş görünüyor. 0 KB dosyalar kaynak olarak kullanılamaz.';
+  }
+  if (status == DriveItemStatus.processing) {
+    return 'Dosya metni çıkarılıyor. İşlem tamamlanınca üretim için kullanılabilir.';
+  }
+  if (status == DriveItemStatus.uploading) {
+    return 'Yükleme devam ediyor. Tamamlanmadan üretim başlatılamaz.';
+  }
+  if (status == DriveItemStatus.draft) {
+    return 'Taslak dosyalar üretimde kullanılamaz.';
+  }
+  if (status != DriveItemStatus.failed) return null;
+
+  final metadata = _map(row['metadata']);
+  final code = _text(metadata['extractionErrorCode']).toUpperCase();
+  final message = _text(metadata['extractionError']);
+  if (code == 'FILE_SCANNED_PDF_OCR_REQUIRED' ||
+      message.contains('taranmış') ||
+      message.toLowerCase().contains('ocr')) {
+    return 'Bu PDF taranmış/görsel tabanlı görünüyor. Metin çıkarılamadı; OCR desteği gerekir.';
+  }
+  if (code == 'FILE_TYPE_LIMITED_SUPPORT') {
+    if (message.contains('.pptx') || message.contains('PPTX')) {
+      return 'Eski PPT dosyaları sınırlı desteklenir. Dosyayı PPTX olarak kaydedip tekrar yükleyin.';
+    }
+    if (message.contains('.docx') || message.contains('DOCX')) {
+      return 'Eski DOC dosyaları sınırlı desteklenir. Dosyayı DOCX olarak kaydedip tekrar yükleyin.';
+    }
+    return 'Bu eski Office formatı sınırlı desteklenir. Dosyayı güncel Office formatında tekrar yükleyin.';
+  }
+  if (code == 'FILE_TEXT_EMPTY') {
+    return 'Dosyadan okunabilir metin çıkarılamadı. İçeriği kontrol edip tekrar yükleyin.';
+  }
+  if (code == 'FILE_TYPE_UNSUPPORTED') {
+    return 'Bu dosya türü desteklenmiyor. PDF, PPTX veya DOCX yükleyin.';
+  }
+  if (code == 'FILE_OBJECT_MISSING') {
+    return 'Yüklenen dosya depolama alanında bulunamadı. Lütfen tekrar yükleyin.';
+  }
+  if (code == 'FILE_OBJECT_EMPTY') {
+    return 'Yüklenen dosya boş görünüyor. Lütfen dolu bir dosya yükleyin.';
+  }
+  if (message.isNotEmpty) return message;
+  return 'Dosya işlenemedi. Dosyayı kontrol edip tekrar yükleyin.';
 }
 
 DriveFileKind _kindFromText(String kind) {

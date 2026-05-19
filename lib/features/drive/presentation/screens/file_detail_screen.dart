@@ -36,7 +36,8 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
     final file = widget.file;
     final generatedCount = file.generated.length;
     final hasGenerated = generatedCount > 0;
-    final readyForGeneration = file.status == DriveItemStatus.completed;
+    final readyForGeneration = file.isReadyForGeneration;
+    final readinessMessage = _readinessMessage(file);
 
     return WorkspaceScroll(
       children: [
@@ -152,6 +153,10 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
             ],
           ),
         ),
+        if (!readyForGeneration && file.statusMessage != null) ...[
+          const SizedBox(height: 12),
+          _ReadinessNotice(message: file.statusMessage!),
+        ],
         const SectionTitle(title: 'Dosya Özeti'),
         GlassPanel(
           padding: const EdgeInsets.all(18),
@@ -164,7 +169,7 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: columns == 1 ? 4.2 : 2.45,
+                mainAxisExtent: 72,
                 children: [
                   _SummaryMetric(
                     icon: Icons.description_outlined,
@@ -255,12 +260,8 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
               icon: file.status == DriveItemStatus.failed
                   ? Icons.error_outline_rounded
                   : Icons.hourglass_top_rounded,
-              message: file.status == DriveItemStatus.failed
-                  ? 'Dosya işlenemedi.'
-                  : 'Dosya üretime hazırlanıyor.',
-              subMessage: file.status == DriveItemStatus.failed
-                  ? 'Bu kaynaktan üretim almak için dosyayı yeniden yükleyin.'
-                  : 'İşleme tamamlandığında flashcard, soru ve özet üretebilirsiniz.',
+              message: _blockedGenerationTitle(file.status),
+              subMessage: readinessMessage,
             ),
           ),
         const SectionTitle(title: 'Üretim merkezleri'),
@@ -272,14 +273,18 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
               final baseForce = _GenerationCenterAction(
                 icon: Icons.layers_rounded,
                 title: 'BaseForce',
-                subtitle: 'Flashcard, soru, özet ve algoritma üret',
-                onTap: widget.onOpenBaseForce,
+                subtitle: readyForGeneration
+                    ? 'Flashcard, soru, özet ve algoritma üret'
+                    : readinessMessage,
+                onTap: readyForGeneration ? widget.onOpenBaseForce : null,
               );
               final sourceLab = _GenerationCenterAction(
                 icon: Icons.science_outlined,
                 title: 'SourceLab',
-                subtitle: 'Senaryo, plan, podcast ve zihin haritası hazırla',
-                onTap: widget.onOpenSourceLab,
+                subtitle: readyForGeneration
+                    ? 'Senaryo, plan, podcast ve zihin haritası hazırla'
+                    : readinessMessage,
+                onTap: readyForGeneration ? widget.onOpenSourceLab : null,
               );
               if (compact) {
                 return Column(
@@ -355,6 +360,31 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
       DriveItemStatus.draft => 'Taslak',
     };
   }
+
+  String _readinessMessage(DriveFile file) {
+    final message = file.statusMessage;
+    if (message != null && message.isNotEmpty) return message;
+    return switch (file.status) {
+      DriveItemStatus.completed => 'Kaynak üretime hazır.',
+      DriveItemStatus.processing =>
+        'Dosya metni çıkarılıyor. İşlem tamamlanınca üretim için kullanılabilir.',
+      DriveItemStatus.uploading =>
+        'Yükleme devam ediyor. Tamamlanmadan üretim başlatılamaz.',
+      DriveItemStatus.failed =>
+        'Dosya işlenemedi. Dosyayı kontrol edip tekrar yükleyin.',
+      DriveItemStatus.draft => 'Taslak dosyalar üretimde kullanılamaz.',
+    };
+  }
+
+  String _blockedGenerationTitle(DriveItemStatus status) {
+    return switch (status) {
+      DriveItemStatus.failed => 'Bu kaynak üretime hazır değil.',
+      DriveItemStatus.processing => 'Dosya işleniyor.',
+      DriveItemStatus.uploading => 'Yükleme devam ediyor.',
+      DriveItemStatus.draft => 'Taslak kaynak seçilemez.',
+      DriveItemStatus.completed => 'Dosya hazır.',
+    };
+  }
 }
 
 class _GenerationCenterAction extends StatelessWidget {
@@ -368,23 +398,28 @@ class _GenerationCenterAction extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.selectedBlue,
+          color: enabled ? AppColors.selectedBlue : AppColors.page,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.softLine),
         ),
         child: Row(
           children: [
-            Icon(icon, color: AppColors.blue, size: 28),
+            Icon(
+              icon,
+              color: enabled ? AppColors.blue : AppColors.muted,
+              size: 28,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -394,8 +429,8 @@ class _GenerationCenterAction extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.navy,
+                    style: TextStyle(
+                      color: enabled ? AppColors.navy : AppColors.muted,
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
                     ),
@@ -414,9 +449,45 @@ class _GenerationCenterAction extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.navy),
+            Icon(
+              enabled
+                  ? Icons.chevron_right_rounded
+                  : Icons.lock_outline_rounded,
+              color: enabled ? AppColors.navy : AppColors.muted,
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ReadinessNotice extends StatelessWidget {
+  const _ReadinessNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassPanel(
+      padding: const EdgeInsets.all(14),
+      borderColor: AppColors.softLine,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, color: AppColors.blue),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 14,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

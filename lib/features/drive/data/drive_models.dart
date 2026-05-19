@@ -155,6 +155,7 @@ class DriveFile {
     required this.courseTitle,
     required this.sectionTitle,
     required this.status,
+    this.statusMessage,
     this.tag,
     this.featured = false,
     this.selected = false,
@@ -170,10 +171,13 @@ class DriveFile {
   final String courseTitle;
   final String sectionTitle;
   final DriveItemStatus status;
+  final String? statusMessage;
   final String? tag;
   final bool featured;
   final bool selected;
   final List<GeneratedOutput> generated;
+
+  bool get isReadyForGeneration => status == DriveItemStatus.completed;
 
   DriveFile copyWith({
     String? id,
@@ -185,6 +189,7 @@ class DriveFile {
     String? courseTitle,
     String? sectionTitle,
     DriveItemStatus? status,
+    String? statusMessage,
     String? tag,
     bool? featured,
     bool? selected,
@@ -200,6 +205,7 @@ class DriveFile {
       courseTitle: courseTitle ?? this.courseTitle,
       sectionTitle: sectionTitle ?? this.sectionTitle,
       status: status ?? this.status,
+      statusMessage: statusMessage ?? this.statusMessage,
       tag: tag ?? this.tag,
       featured: featured ?? this.featured,
       selected: selected ?? this.selected,

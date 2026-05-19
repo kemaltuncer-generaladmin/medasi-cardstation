@@ -41,6 +41,15 @@ enum WorkspaceRouteKey {
 
 enum _UploadPhase { idle, selecting, uploading, completing, success, error }
 
+class _UploadStepFailure implements Exception {
+  const _UploadStepFailure(this.cause);
+
+  final Object cause;
+
+  @override
+  String toString() => cause.toString();
+}
+
 class DriveWorkspaceScreen extends StatefulWidget {
   const DriveWorkspaceScreen({super.key});
 
@@ -379,12 +388,10 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
       );
       final session = await _uploadStep(
         phase: _UploadPhase.uploading,
-        code: 'upload-session',
         action: () => repository.createUploadSession(draft),
       );
       await _uploadStep<void>(
         phase: _UploadPhase.uploading,
-        code: 'storage-upload',
         action: () => uploadService.uploadBytes(
           uploadUrl: session.uploadUrl,
           headers: session.headers,
@@ -405,7 +412,6 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
       _showSnack(_uploadPhaseMessage(uploadPhase));
       final uploaded = await _uploadStep(
         phase: _UploadPhase.completing,
-        code: 'complete-upload',
         action: () => repository.completeUpload(
           file: picked,
           objectName: session.objectName,
@@ -457,7 +463,6 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
 
   Future<T> _uploadStep<T>({
     required _UploadPhase phase,
-    required String code,
     required Future<T> Function() action,
   }) async {
     if (mounted) {
@@ -466,7 +471,7 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
     try {
       return await action();
     } catch (error) {
-      throw StateError('${_friendlyError(error)} Kod: $code');
+      throw _UploadStepFailure(error);
     }
   }
 
@@ -778,17 +783,19 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
   }
 
   void _markLocalUploadFailed(String localId, DriveFile file, Object error) {
+    final message = _friendlyError(error);
     final failed = file.copyWith(
       id: localId,
       status: DriveItemStatus.failed,
       pageLabel: 'Yüklenemedi',
+      statusMessage: message,
     );
     _replaceFile(failed);
     _upsertUploadTask(
       failed,
       status: DriveItemStatus.failed,
       progress: 0,
-      errorLabel: _friendlyError(error),
+      errorLabel: message,
     );
   }
 
@@ -1000,6 +1007,9 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
   }
 
   String _friendlyError(Object error) {
+    if (error is _UploadStepFailure) {
+      return _friendlyError(error.cause);
+    }
     if (_isUnauthorizedSession(error)) {
       return 'Oturum süren doldu. Lütfen tekrar giriş yap.';
     }

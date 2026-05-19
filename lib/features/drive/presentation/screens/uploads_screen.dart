@@ -88,50 +88,62 @@ class _UploadsScreenState extends State<UploadsScreen> {
         const SizedBox(height: 18),
         GlassPanel(
           padding: const EdgeInsets.all(22),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${widget.uploads.length} dosya',
-                      style: const TextStyle(
-                        color: AppColors.navy,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Dosyalar Drive alanınıza yükleniyor.\nİşlemleri aşağıdan takip edebilirsiniz.',
-                      style: TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 17,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 520;
+              final summary = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SBSecondaryButton(
-                    label: 'Yeni Dosya',
-                    icon: Icons.add_rounded,
-                    onPressed: widget.onNewFile,
-                    size: SBButtonSize.small,
-                    fullWidth: false,
+                  Text(
+                    '${widget.uploads.length} dosya',
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  const SizedBox(height: 18),
-                  const SizedBox(
-                    width: 150,
-                    height: 110,
-                    child: CustomPaint(painter: _UploadHeroPainter()),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Yükleme, metin çıkarımı ve hata durumlarını buradan takip edebilirsiniz.',
+                    style: TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 17,
+                      height: 1.35,
+                    ),
                   ),
                 ],
-              ),
-            ],
+              );
+              final action = SBSecondaryButton(
+                label: 'Yeni Dosya',
+                icon: Icons.add_rounded,
+                onPressed: widget.onNewFile,
+                size: SBButtonSize.small,
+                fullWidth: compact,
+              );
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [summary, const SizedBox(height: 16), action],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: summary),
+                  const SizedBox(width: 18),
+                  Column(
+                    children: [
+                      action,
+                      const SizedBox(height: 18),
+                      const SizedBox(
+                        width: 150,
+                        height: 110,
+                        child: CustomPaint(painter: _UploadHeroPainter()),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
         const SizedBox(height: 18),
@@ -152,7 +164,7 @@ class _UploadsScreenState extends State<UploadsScreen> {
                 onTap: () => setState(() => _filter = _UploadFilterKind.active),
               ),
               _UploadFilter(
-                label: 'Tamamlandı',
+                label: 'Hazır',
                 icon: Icons.check_circle_outline_rounded,
                 active: _filter == _UploadFilterKind.completed,
                 onTap: () =>
@@ -200,7 +212,7 @@ class _UploadsScreenState extends State<UploadsScreen> {
   String get _emptyTitle {
     return switch (_filter) {
       _UploadFilterKind.active => 'Devam eden yükleme yok.',
-      _UploadFilterKind.completed => 'Tamamlanan yükleme yok.',
+      _UploadFilterKind.completed => 'Hazır dosya yok.',
       _UploadFilterKind.failed => 'Hatalı yükleme yok.',
       _UploadFilterKind.all => 'Yükleme bulunmuyor.',
     };
@@ -211,7 +223,7 @@ class _UploadsScreenState extends State<UploadsScreen> {
       _UploadFilterKind.active =>
         'Yeni dosya seçtiğinizde yükleme ilerlemesi burada görünür.',
       _UploadFilterKind.completed =>
-        'Başarıyla yüklenen dosyalar Drive listesine eklenir.',
+        'Metni çıkarılıp üretime hazır olan dosyalar burada görünür.',
       _UploadFilterKind.failed =>
         'Yükleme hatası olursa dosyayı tekrar seçerek deneyebilirsiniz.',
       _UploadFilterKind.all => 'Yeni dosyalar yükleyerek başlayabilirsiniz.',
@@ -450,7 +462,9 @@ class _UploadState extends StatelessWidget {
             const StatusPill(status: DriveItemStatus.failed),
             const SizedBox(height: 9),
             Text(
-              upload.errorLabel ?? 'Hata',
+              upload.errorLabel ??
+                  upload.file.statusMessage ??
+                  'Dosya işlenemedi. Dosyayı kontrol edip tekrar deneyin.',
               style: const TextStyle(color: AppColors.muted, fontSize: 14),
             ),
             const SizedBox(height: 8),

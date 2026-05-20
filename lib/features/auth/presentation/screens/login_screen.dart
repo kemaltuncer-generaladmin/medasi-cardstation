@@ -112,7 +112,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
     if (email.isEmpty || password.isEmpty) {
-      setState(() => errorMessage = 'E-posta ve şifre alanları boş bırakılamaz.');
+      setState(
+        () => errorMessage = 'E-posta ve şifre alanları boş bırakılamaz.',
+      );
       return;
     }
     if (!email.contains('@')) {
@@ -132,11 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) {
         return;
       }
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        _postLoginRoute,
-        (_) => false,
-      );
+      Navigator.pushNamedAndRemoveUntil(context, _postLoginRoute, (_) => false);
     } catch (error) {
       if (mounted) {
         setState(
@@ -230,10 +228,10 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         const AuthHeader(
           title: 'Hoş geldin',
-          subtitle: 'Kaynaklarını akıllı öğrenme\naraçlarına dönüştür.',
+          subtitle: 'Kaynaklarını yükle, çıktıları üret, çalışmanı düzenle.',
           art: AuthArtType.login,
         ),
-        const SizedBox(height: 38),
+        const SizedBox(height: 28),
         AuthTextField(
           icon: Icons.mail_outline_rounded,
           hint: 'E-posta',
@@ -242,7 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.email],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
         AuthTextField(
           icon: Icons.lock_outline_rounded,
           hint: 'Şifre',
@@ -261,16 +259,14 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
             onPressed: loading || _socialLoading
                 ? null
-                : () => Navigator.pushNamed(
-                      context,
-                      ForgotPasswordScreen.route,
-                    ),
+                : () =>
+                      Navigator.pushNamed(context, ForgotPasswordScreen.route),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.blue,
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -279,10 +275,7 @@ class _LoginScreenState extends State<LoginScreen> {
               fit: BoxFit.scaleDown,
               child: Text(
                 'Şifremi unuttum',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
             ),
           ),
@@ -317,11 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
           if (appleOAuthEnabled) ...[
             SocialAuthButton(
               label: 'Apple ile devam et',
-              icon: const Icon(
-                Icons.apple,
-                size: 26,
-                color: AppColors.navy,
-              ),
+              icon: const Icon(Icons.apple, size: 26, color: AppColors.navy),
               onPressed: _socialLoading || loading ? null : _signInWithApple,
             ),
             const SizedBox(height: 12),
@@ -329,10 +318,12 @@ class _LoginScreenState extends State<LoginScreen> {
         ] else ...[
           const SizedBox(height: 16),
           const AuthStatusBox(
-            message: 'Bu giriş yöntemi şu anda aktif değil.',
+            message:
+                'Google ve Apple girişi şu anda aktif değil. E-posta ile giriş yapabilirsin.',
+            error: false,
           ),
         ],
-        const SizedBox(height: 22),
+        const SizedBox(height: 18),
         SBSecondaryButton(
           label: 'Hesap Oluştur',
           onPressed: loading || _socialLoading
@@ -340,7 +331,7 @@ class _LoginScreenState extends State<LoginScreen> {
               : () => Navigator.pushNamed(context, RegisterScreen.route),
           size: SBButtonSize.large,
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 16),
         Center(
           child: TextButton(
             onPressed: loading || _socialLoading

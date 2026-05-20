@@ -10,6 +10,7 @@ import '../../../drive/data/drive_models.dart';
 import '../../../drive/data/sourcebase_drive_api.dart';
 import '../../../drive/presentation/widgets/drive_ui.dart';
 import '../../../drive/presentation/widgets/sourcebase_bottom_nav.dart';
+import '../../../generated_outputs/presentation/widgets/generated_output_readers.dart';
 
 enum BaseForceView {
   home,
@@ -157,18 +158,6 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
           duration: const Duration(milliseconds: 1100),
         ),
       );
-  }
-
-  void _honestToast() {
-    _toast(
-      'Önizleme temsili gösterilir. Kaydedilebilir içerik için üretimi başlatın.',
-    );
-  }
-
-  void _uploadGuidanceToast() {
-    _toast(
-      'Yeni dosya yüklemek için Drive > Yüklemeler ekranındaki Yeni Dosya akışını kullanın.',
-    );
   }
 
   Future<void> _copyLatestResult() async {
@@ -430,7 +419,9 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
     }
 
     final jobType = _baseForceJobType(kind);
-    final readySourceIds = _selectedReadyFiles().map((file) => file.id).toList();
+    final readySourceIds = _selectedReadyFiles()
+        .map((file) => file.id)
+        .toList();
     final job = _BaseForceJobState(
       localId: DateTime.now().microsecondsSinceEpoch.toString(),
       kind: kind,
@@ -536,10 +527,10 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
         final code = data is Map ? data['errorCode']?.toString() : null;
         final message = data is Map
             ? data['errorMessage']?.toString()
-            : 'AI üretimi başarısız oldu.';
+            : 'Çıktı oluşturulamadı.';
         throw StateError(
           message == null || message.trim().isEmpty
-              ? 'AI üretimi başarısız oldu.'
+              ? 'Çıktı oluşturulamadı.'
               : [code, message].whereType<String>().join(': '),
         );
       }
@@ -553,7 +544,7 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
       await Future<void>.delayed(const Duration(seconds: 2));
     }
     throw StateError(
-      'AI üretimi zaman aşımına uğradı. Kuyruktan tekrar deneyin.',
+      'Çıktı hazırlanması zaman aşımına uğradı. Kuyruktan tekrar deneyebilirsin.',
     );
   }
 
@@ -631,7 +622,6 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
               'comparison' => BaseForceView.comparisonFactory,
               _ => BaseForceView.flashcardFactory,
             }),
-            onUpload: _uploadGuidanceToast,
           ),
           BaseForceView.flashcardFactory => _FlashcardFactoryScreen(
             data: widget.data,
@@ -650,7 +640,6 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
             onExtractKeyChanged: (v) => setState(() => flashcardExtractKey = v),
             onAddHintsChanged: (v) => setState(() => flashcardAddHints = v),
             onGenerate: () => _startGeneration(GeneratedKind.flashcard),
-            onSavePreview: _honestToast,
           ),
           BaseForceView.questionFactory => _QuestionFactoryScreen(
             data: widget.data,
@@ -752,15 +741,6 @@ class _BaseForceScreenState extends State<BaseForceScreen> {
                 _latestResult?.kind ?? GeneratedKind.flashcard,
               ),
             ),
-            onEdit: () {
-              if (_latestResult?.kind == GeneratedKind.algorithm) {
-                _open(BaseForceView.sourcePicker);
-                return;
-              }
-              _toast(
-                'Bu sürümde düzenleme yerine ayarları güncelleyip Yeniden Üret ile devam edin.',
-              );
-            },
           ),
           BaseForceView.allGenerations => _AllGenerationsScreen(
             data: widget.data,
@@ -888,9 +868,7 @@ String _baseForceOutputKind(GeneratedKind kind) {
 }
 
 bool _isBaseForceReadySource(DriveFile file) {
-  return file.id.trim().isNotEmpty &&
-      file.status == DriveItemStatus.completed &&
-      !_isZeroSizeLabel(file.sizeLabel);
+  return file.id.trim().isNotEmpty && driveFileUsableForGeneration(file);
 }
 
 bool _isZeroSizeLabel(String label) {
@@ -914,27 +892,22 @@ String _baseForceSourceBlockedMessage(DriveFile file) {
 String _baseForceSourceBlockedReason(DriveFile file) {
   if (file.id.trim().isEmpty) return 'Kaynak kimliği eksik.';
   if (_isZeroSizeLabel(file.sizeLabel)) {
-    return '0 KB kaynaklarla üretim başlatılamaz.';
+    return 'Eksik yükleme: Dosya yükleme tamamlanmamış.';
   }
   return switch (file.status) {
-    DriveItemStatus.completed => 'Bu kaynak üretime hazır değil.',
-    DriveItemStatus.processing => 'Bu dosya henüz işleniyor.',
-    DriveItemStatus.uploading => 'Bu dosyanın yüklemesi sürüyor.',
-    DriveItemStatus.failed => 'Bu dosyada işleme hatası var.',
-    DriveItemStatus.draft => 'Taslak kaynaklarla üretim başlatılamaz.',
+    DriveItemStatus.completed => 'Hazır değil: Bu kaynakla çıktı üretilemez.',
+    DriveItemStatus.processing => 'İşleniyor: Hazır olduğunda kullanılabilir.',
+    DriveItemStatus.uploading =>
+      'Yükleniyor: Dosya aktarımı tamamlanınca kullanılabilir.',
+    DriveItemStatus.failed => driveFriendlyStatusDescription(file),
+    DriveItemStatus.draft => 'Eksik yükleme: Dosya yükleme tamamlanmamış.',
   };
 }
 
 String _baseForceReadyLabel(DriveFile file) {
-  if (_isBaseForceReadySource(file)) return 'Hazır';
-  if (_isZeroSizeLabel(file.sizeLabel)) return '0 KB';
-  return switch (file.status) {
-    DriveItemStatus.completed => 'Uygun değil',
-    DriveItemStatus.processing => 'İşleniyor',
-    DriveItemStatus.uploading => 'Yükleniyor',
-    DriveItemStatus.failed => 'Hata',
-    DriveItemStatus.draft => 'Taslak',
-  };
+  if (_isBaseForceReadySource(file)) return 'Kullanıma hazır';
+  if (_isZeroSizeLabel(file.sizeLabel)) return 'Eksik yükleme';
+  return driveStatusLabel(file.status);
 }
 
 _BFSource _bfSourceFromFile(DriveFile file, {String time = 'Az önce'}) {
@@ -1209,16 +1182,30 @@ String _friendlyBaseForceError(Object error, {GeneratedKind? kind}) {
       'Algoritma şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
   const comparisonFallback =
       'Karşılaştırma tablosu şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
-  if (text.isEmpty) return 'AI üretimi tamamlanamadı. Lütfen tekrar deneyin.';
+  if (text.isEmpty) {
+    return 'Çıktı oluşturulamadı. Kaynağı veya ayarları kontrol edip tekrar deneyebilirsin.';
+  }
   if (text.contains('SourceBase Supabase client is not configured')) {
-    return 'Oturum bağlantısı hazır değil. Lütfen tekrar giriş yapın.';
+    return 'Oturum süren dolmuş olabilir. Tekrar giriş yaparak devam edebilirsin.';
+  }
+  final lowerText = text.toLowerCase();
+  if (lowerText.contains('network') ||
+      lowerText.contains('failed to fetch') ||
+      lowerText.contains('socket') ||
+      lowerText.contains('connection')) {
+    return 'Bağlantı kurulamadı. İnternet bağlantını kontrol edip tekrar dene.';
+  }
+  if (lowerText.contains('unauthorized') ||
+      lowerText.contains('jwt') ||
+      lowerText.contains('401')) {
+    return 'Oturum süren dolmuş olabilir. Tekrar giriş yaparak devam edebilirsin.';
   }
   if (text.contains('INSUFFICIENT_MC') ||
       text.toLowerCase().contains('yetersiz medasicoin')) {
-    return 'MedasiCoin bakiyeniz bu üretim için yeterli değil.';
+    return 'MC bakiyen bu üretim için yeterli değil.';
   }
   if (text.contains('SOURCE_TEXT_REQUIRED')) {
-    return 'Bu kaynakta üretim için okunabilir içerik yok. Başka bir hazır PDF seçin.';
+    return 'Bu kaynakta üretim için okunabilir içerik yok. Metin içeren hazır bir PDF veya PPTX seç.';
   }
   if (text.contains('VERTEX_AUTH_FAILED') ||
       text.contains('VERTEX_UPSTREAM_ERROR') ||
@@ -1227,12 +1214,12 @@ String _friendlyBaseForceError(Object error, {GeneratedKind? kind}) {
       text.contains('BACKGROUND_JOB_FAILED')) {
     if (isAlgorithm) return algorithmFallback;
     if (isComparison) return comparisonFallback;
-    return 'AI servisi şu anda yanıt veremiyor. Biraz sonra tekrar deneyin.';
+    return 'Çıktı şu anda hazırlanamadı. Kaynağı veya ayarları kontrol edip tekrar deneyebilirsin.';
   }
   if (_looksLikeTechnicalBaseForceError(text)) {
     if (isAlgorithm) return algorithmFallback;
     if (isComparison) return comparisonFallback;
-    return 'AI üretimi şu anda tamamlanamadı. Kaynağın güvende; harcanan MC varsa iade edilir.';
+    return 'Çıktı oluşturulamadı. Kaynağı veya ayarları kontrol edip tekrar deneyebilirsin.';
   }
   if (isAlgorithm && text.toLowerCase().contains('ai üretimi başarısız')) {
     return algorithmFallback;
@@ -1263,7 +1250,7 @@ String _baseForceProgressLabel(
   _JobUiStatus status,
   double progress,
 ) {
-  if (status == _JobUiStatus.pending) return 'Kaynak analiz ediliyor';
+  if (status == _JobUiStatus.pending) return 'İşlem sıraya alındı';
   if (kind == GeneratedKind.comparison || kind == GeneratedKind.table) {
     if (status == _JobUiStatus.completed) return 'Karşılaştırma hazır';
     if (status == _JobUiStatus.failed) return 'Karşılaştırma tamamlanamadı';
@@ -1291,10 +1278,10 @@ String _baseForceProgressLabel(
 
 String _jobStatusLabel(_JobUiStatus status) {
   return switch (status) {
-    _JobUiStatus.pending => 'Beklemede',
-    _JobUiStatus.running => 'İşleniyor',
-    _JobUiStatus.completed => 'Tamamlandı',
-    _JobUiStatus.failed => 'Hata',
+    _JobUiStatus.pending => 'İşlem sıraya alındı',
+    _JobUiStatus.running => 'Çıktı hazırlanıyor',
+    _JobUiStatus.completed => 'Çıktı hazır',
+    _JobUiStatus.failed => 'Çıktı oluşturulamadı',
   };
 }
 
@@ -1323,14 +1310,18 @@ class _BaseForcePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final isMobile = width < 600;
-    final horizontalPadding = isMobile ? (width < 390 ? 14.0 : 16.0) : 32.0;
+    final horizontalPadding = width < 600
+        ? 16.0
+        : width < 1024
+        ? 24.0
+        : 32.0;
     final topPadding = MediaQuery.viewPaddingOf(context).top + 12;
     final bottomPadding = isMobile
         ? SourceBaseBottomNav.scrollEndPadding(context)
         : 48.0;
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 940),
+        constraints: const BoxConstraints(maxWidth: 1180),
         child: ListView(
           physics: const BouncingScrollPhysics(),
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -1891,19 +1882,13 @@ class _BaseForceHome extends StatelessWidget {
   Widget build(BuildContext context) {
     return _BaseForcePage(
       title: 'BaseForce',
-      subtitle: 'Kaynaklarını seç, üretim merkezlerinden\nbirini başlat.',
+      subtitle: 'Kaynaklarından hızlı ve odaklı çalışma çıktıları üret.',
       onSearch: onSearch,
       heroTight: true,
       actions: [
         _HeroAction(
-          label: 'Drive’dan Seç',
+          label: 'Kaynak seç',
           icon: Icons.change_history_rounded,
-          onTap: onOpenSources,
-        ),
-        _HeroAction(
-          label: 'Yeni Dosya Yükle',
-          icon: Icons.cloud_upload_rounded,
-          cyan: true,
           onTap: onOpenSources,
         ),
       ],
@@ -1918,22 +1903,22 @@ class _BaseForceHome extends StatelessWidget {
           children: [
             _FactoryCard(
               kind: GeneratedKind.flashcard,
-              title: 'Flashcard\nFabrikası',
-              subtitle: 'Kaynaklarından akıllı flashcard setleri üretir.',
+              title: 'Flashcard Factory',
+              subtitle: 'Kaynağından tekrar kartları oluştur.',
               buttonColor: AppColors.blue,
               onTap: () => onOpenFactory('flashcard'),
             ),
             _FactoryCard(
               kind: GeneratedKind.question,
-              title: 'Soru\nFabrikası',
-              subtitle: 'Konuya özel sorular oluşturur.',
+              title: 'Soru Fabrikası',
+              subtitle: 'Kaynağından çalışma soruları üret.',
               buttonColor: AppColors.green,
               onTap: () => onOpenFactory('question'),
             ),
             _FactoryCard(
               kind: GeneratedKind.summary,
-              title: 'Sınav Sabahı\nÖzeti',
-              subtitle: 'En kritik bilgileri özet haline getirir.',
+              title: 'Sınav Sabahı Özeti',
+              subtitle: 'Son tekrar için kısa ve yoğun özet çıkar.',
               buttonColor: AppColors.purple,
               onTap: () => onOpenFactory('summary'),
             ),
@@ -1945,15 +1930,15 @@ class _BaseForceHome extends StatelessWidget {
           children: [
             _FactoryCard(
               kind: GeneratedKind.algorithm,
-              title: 'Akış Şeması &\nAlgoritma',
-              subtitle: 'Karmaşık konuları şemalarla açıklar.',
+              title: 'Akış Şeması / Algoritma',
+              subtitle: 'Süreçleri adım adım görselleştir.',
               buttonColor: AppColors.orange,
               onTap: () => onOpenFactory('algorithm'),
             ),
             _FactoryCard(
               kind: GeneratedKind.comparison,
-              title: 'Karşılaştırma\nTablosu',
-              subtitle: 'Kavramları yan yana karşılaştırır.',
+              title: 'Karşılaştırma Tablosu',
+              subtitle: 'Benzer kavramları tablo halinde karşılaştır.',
               buttonColor: AppColors.cyan,
               onTap: () => onOpenFactory('comparison'),
             ),
@@ -1978,7 +1963,7 @@ class _BaseForceHome extends StatelessWidget {
                   icon: Icons.drive_folder_upload_outlined,
                   title: 'Drive kaynağı yok',
                   message:
-                      'Üretim başlatmak için Drive’a PDF, PPTX veya DOCX kaynak ekleyin.',
+                      'BaseForce çıktısı üretmek için önce Drive’a metin içeren PDF veya PPTX yükle.',
                 )
               : Column(
                   children: [
@@ -2033,7 +2018,6 @@ class _SourcePickerScreen extends StatelessWidget {
     required this.onSearch,
     required this.onToggleSource,
     required this.onContinue,
-    required this.onUpload,
     required this.onBack,
   });
 
@@ -2042,34 +2026,16 @@ class _SourcePickerScreen extends StatelessWidget {
   final VoidCallback onSearch;
   final ValueChanged<String> onToggleSource;
   final VoidCallback onContinue;
-  final VoidCallback onUpload;
   final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     return _BaseForcePage(
       title: 'Kaynak Seç',
-      subtitle:
-          'Drive\u2019daki dosyalar\u0131n\u0131 se\xE7 veya yeni y\xFCkle.',
+      subtitle: 'Hazır Drive kaynaklarını seç ve üretime devam et.',
       onSearch: onSearch,
       onBack: onBack,
       heroTight: true,
-      actions: [
-        _HeroAction(
-          label: 'Drive\u2019dan Se\xE7',
-          icon: Icons.change_history_rounded,
-          onTap: () => _showBaseForceToast(
-            context,
-            'Drive kaynakları aşağıdaki listede gösteriliyor. Üretim için hazır rozetli kaynakları seçin.',
-          ),
-        ),
-        _HeroAction(
-          label: 'Yeni Yükle',
-          icon: Icons.cloud_upload_rounded,
-          cyan: true,
-          onTap: onUpload,
-        ),
-      ],
       children: [
         Row(
           children: [
@@ -2079,42 +2045,13 @@ class _SourcePickerScreen extends StatelessWidget {
                 onTap: onSearch,
               ),
             ),
-            const SizedBox(width: 10),
-            _FilterButton(
-              onTap: () => _showBaseForceToast(
-                context,
-                'Filtreleme bu sürümde tüm kaynaklar görünümünde. Hazır rozetli kaynaklar üretime alınabilir.',
-              ),
-            ),
           ],
         ),
-        const SizedBox(height: 18),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: const [
-            _SourceFilter(
-              label: 'Tümü',
-              selected: true,
-              icon: Icons.folder_rounded,
-            ),
-            _SourceFilter(label: 'PDF', kind: DriveFileKind.pdf),
-            _SourceFilter(label: 'PPTX', kind: DriveFileKind.pptx),
-            _SourceFilter(label: 'DOCX', kind: DriveFileKind.docx),
-            _SourceFilter(
-              label: 'Kardiyoloji',
-              icon: Icons.monitor_heart_rounded,
-            ),
-            _SourceFilter(
-              label: 'Farmakoloji',
-              icon: Icons.medication_liquid_rounded,
-            ),
-            _SourceFilter(
-              label: 'Anatomi',
-              icon: Icons.accessibility_new_rounded,
-            ),
-            _SourceFilter(label: 'Biyokimya', icon: Icons.science_rounded),
-          ],
+        const SizedBox(height: 12),
+        const _BaseNotice(
+          icon: Icons.description_outlined,
+          text:
+              'PDF, PPTX ve mevcut destekli Drive kaynakları listelenir. Eski PPT dosyaları desteklenmez.',
         ),
         _SectionHeader(
           title: 'Drive’daki Dosyalar',
@@ -2125,9 +2062,9 @@ class _SourcePickerScreen extends StatelessWidget {
           child: data.recentFiles.isEmpty
               ? const _EmptyBaseForceState(
                   icon: Icons.folder_off_outlined,
-                  title: 'Seçilebilir dosya yok',
+                  title: 'Henüz hazır kaynak yok',
                   message:
-                      'Yeni Yükle ile Drive’a kaynak ekledikten sonra üretim başlatabilirsiniz.',
+                      'BaseForce çıktısı üretmek için önce Drive’a metin içeren PDF veya PPTX yükle.',
                 )
               : Column(
                   children: [
@@ -2141,7 +2078,11 @@ class _SourcePickerScreen extends StatelessWidget {
                 ),
         ),
         const SizedBox(height: 18),
-        _UploadDropZone(onTap: onUpload),
+        const _BaseNotice(
+          icon: Icons.info_outline_rounded,
+          text:
+              'Yalnızca kullanıma hazır kaynaklar seçilebilir. İşlenen, hatalı, desteklenmeyen veya eksik yüklenen dosyalar üretime alınmaz.',
+        ),
         const SizedBox(height: 18),
         _SelectedSourcesTray(
           data: data,
@@ -2162,7 +2103,6 @@ class _FlashcardFactoryScreen extends StatelessWidget {
     required this.onBack,
     required this.onPickSources,
     required this.onGenerate,
-    required this.onSavePreview,
     required this.cardStyle,
     required this.cardCount,
     required this.cardDifficulty,
@@ -2181,7 +2121,6 @@ class _FlashcardFactoryScreen extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onPickSources;
   final VoidCallback onGenerate;
-  final VoidCallback onSavePreview;
   final String cardStyle;
   final int cardCount;
   final String cardDifficulty;
@@ -2204,12 +2143,12 @@ class _FlashcardFactoryScreen extends StatelessWidget {
     }
     final canGenerate = readyFile != null;
     final sourceStatus = readyFile == null
-        ? 'Hazır kaynak seçilmedi'
+        ? 'Kaynak seç'
         : '${readyFile.title} • ${readyFile.sizeLabel} • ${_baseForceReadyLabel(readyFile)}';
     return _BaseForcePage(
-      title: 'Flashcard Fabrikas\u0131',
+      title: 'Flashcard Factory',
       subtitle:
-          'Kaynaklar\u0131ndan ak\u0131ll\u0131 flashcard\u2019lar \xFCret.',
+          'Kaynağından tekrar kartları oluştur ve bilgiyi hızlıca pekiştir.',
       onSearch: onSearch,
       onBack: onBack,
       art: _BaseForceArtKind.cardSet,
@@ -2318,43 +2257,29 @@ class _FlashcardFactoryScreen extends StatelessWidget {
               ),
             ],
           ),
-          right: _BasePanel(
+          right: const _BasePanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _PanelTitle(
-                  icon: Icons.visibility_outlined,
-                  title: 'Önizleme',
+                _PanelTitle(
+                  icon: Icons.fact_check_outlined,
+                  title: 'Üretim Akışı',
                 ),
-                const SizedBox(height: 22),
-                const _SettingLabel('Ön Yüz'),
-                const SizedBox(height: 10),
-                _FlashCardFace(
-                  text: 'Beta blokerler hangi\nfarmakolojik etkiyi\ngösterir?',
-                  icon: Icons.style_outlined,
-                  center: true,
-                  onTap: onSavePreview,
-                ),
-                const SizedBox(height: 14),
-                const Center(
-                  child: CircleAvatar(
-                    radius: 22,
-                    backgroundColor: AppColors.selectedBlue,
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.blue,
-                      size: 32,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const _SettingLabel('Arka Yüz'),
-                const SizedBox(height: 10),
-                _FlashCardFace(
+                SizedBox(height: 14),
+                _BaseNotice(
+                  icon: Icons.source_outlined,
                   text:
-                      'Beta blokerler, kalpteki beta-1 adrenerjik reseptörleri bloke ederek kalp hızını düşürür, miyokard kasılma gücünü azaltır.',
-                  icon: Icons.auto_awesome_rounded,
-                  onTap: onSavePreview,
+                      'Hazır bir kaynak seçildiğinde üretim gerçek Drive içeriğiyle başlatılır.',
+                ),
+                _BaseNotice(
+                  icon: Icons.payments_outlined,
+                  text:
+                      'MC maliyeti üretim sırasında backend tarafından güvenli şekilde hesaplanır.',
+                ),
+                _BaseNotice(
+                  icon: Icons.hourglass_top_rounded,
+                  text:
+                      'Oluşturma sırasında buton pasifleşir; sonuç hazır olduğunda üretim ekranında açılır.',
                 ),
               ],
             ),
@@ -2371,14 +2296,14 @@ class _FlashcardFactoryScreen extends StatelessWidget {
             ),
             _SummaryItemData(
               Icons.menu_book_rounded,
-              '8',
-              'Tahmini Konu',
+              'Kaynağa bağlı',
+              'Kapsam',
               AppColors.green,
             ),
             _SummaryItemData(
               Icons.payments_outlined,
-              'Backend',
-              'MC hesaplar',
+              'Üretimde hesaplanır',
+              'MC maliyeti',
               AppColors.orange,
             ),
             _SummaryItemData(
@@ -2391,11 +2316,15 @@ class _FlashcardFactoryScreen extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: canGenerate ? 'Flashcard Üret' : 'Hazır Kaynak Seç',
+          label: canGenerate ? 'Flashcard oluştur' : 'Kaynak seç',
           icon: Icons.auto_awesome_rounded,
           height: 58,
           onTap: canGenerate ? onGenerate : null,
         ),
+        if (!canGenerate) ...[
+          const SizedBox(height: 8),
+          _SourceRequiredNotice(onPickSources: onPickSources),
+        ],
       ],
     );
   }
@@ -2445,12 +2374,11 @@ class _QuestionFactoryScreen extends StatelessWidget {
     }
     final canGenerate = readyFile != null;
     final sourceStatus = readyFile == null
-        ? 'Hazır kaynak seçilmedi'
+        ? 'Kaynak seç'
         : '${readyFile.title} • ${readyFile.sizeLabel} • ${_baseForceReadyLabel(readyFile)}';
     return _BaseForcePage(
       title: 'Soru Fabrikas\u0131',
-      subtitle:
-          'Se\xE7ti\u011Finiz kaynaklardan, yapay zeka ile\n\xF6zelle\u015Ftirilmi\u015F sorular \xFCretin.',
+      subtitle: 'Kaynağından çalışmaya uygun sorular üret.',
       onSearch: onSearch,
       onBack: onBack,
       children: [
@@ -2520,27 +2448,16 @@ class _QuestionFactoryScreen extends StatelessWidget {
                 initialValue: addExplanation,
                 onChanged: onExplanationChanged,
               ),
-              const _ThinRule(),
-              const Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _TagChip(label: 'Tan\u0131'),
-                  _TagChip(label: 'Tedavi', color: AppColors.green),
-                  _TagChip(label: 'Fizyoloji', color: AppColors.purple),
-                  _TagChip(
-                    label: 'Alan Ekle',
-                    outlined: true,
-                    icon: Icons.add_rounded,
-                  ),
-                ],
-              ),
             ],
           ),
         ),
         const SizedBox(height: 14),
-        const _TwoPane(left: _QuestionPreview(), right: _ExplanationPreview()),
-        const SizedBox(height: 18),
+        const _BaseNotice(
+          icon: Icons.fact_check_outlined,
+          text:
+              'Sorular, seçilen hazır kaynağın gerçek içeriği üzerinden oluşturulur. Teknik hata mesajları yerine sade durum bilgisi gösterilir.',
+        ),
+        const SizedBox(height: 14),
         _ProductionSummary(
           items: [
             _SummaryItemData(
@@ -2563,8 +2480,8 @@ class _QuestionFactoryScreen extends StatelessWidget {
             ),
             _SummaryItemData(
               Icons.payments_outlined,
-              'Backend',
-              'MC hesaplar',
+              'Üretimde hesaplanır',
+              'MC maliyeti',
               AppColors.orange,
             ),
             _SummaryItemData(
@@ -2577,11 +2494,15 @@ class _QuestionFactoryScreen extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: canGenerate ? 'Soruları Üret' : 'Hazır Kaynak Seç',
+          label: canGenerate ? 'Soru oluştur' : 'Kaynak seç',
           icon: Icons.auto_fix_high_rounded,
           height: 58,
           onTap: canGenerate ? onGenerate : null,
         ),
+        if (!canGenerate) ...[
+          const SizedBox(height: 8),
+          _SourceRequiredNotice(onPickSources: onPickSources),
+        ],
       ],
     );
   }
@@ -2636,12 +2557,12 @@ class _SummaryFactoryScreen extends StatelessWidget {
     }
     final canGenerate = readyFile != null;
     final sourceStatus = readyFile == null
-        ? 'Hazır kaynak seçilmedi'
+        ? 'Kaynak seç'
         : '${readyFile.title} • ${readyFile.sizeLabel} • ${_baseForceReadyLabel(readyFile)}';
     return _BaseForcePage(
       title: 'S\u0131nav Sabah\u0131 \xD6zeti',
       subtitle:
-          'Se\xE7ti\u011Finiz kaynaklardan s\u0131nav\u0131n\u0131za \xF6zel,\nodakl\u0131 bir \xF6zet olu\u015Ftur.',
+          'Son tekrar için kaynağından kısa ve yoğun bir çalışma özeti çıkar.',
       onSearch: onSearch,
       onBack: onBack,
       art: _BaseForceArtKind.notebook,
@@ -2674,9 +2595,13 @@ class _SummaryFactoryScreen extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 20),
-        const _SummaryPreviewCard(),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
+        const _BaseNotice(
+          icon: Icons.fact_check_outlined,
+          text:
+              'Özet, seçilen hazır kaynağın gerçek içeriğinden oluşturulur. Hazır olmayan kaynaklarla üretim başlatılmaz.',
+        ),
+        const SizedBox(height: 14),
         _ProductionSummary(
           items: [
             _SummaryItemData(
@@ -2699,7 +2624,7 @@ class _SummaryFactoryScreen extends StatelessWidget {
             ),
             _SummaryItemData(
               Icons.payments_outlined,
-              'Güvenli hesaplanır',
+              'Üretimde hesaplanır',
               'MC maliyeti',
               AppColors.green,
             ),
@@ -2707,7 +2632,7 @@ class _SummaryFactoryScreen extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: canGenerate ? 'Özeti Oluştur' : 'Hazır Kaynak Seç',
+          label: canGenerate ? 'Özet oluştur' : 'Kaynak seç',
           icon: Icons.auto_awesome_rounded,
           height: 58,
           onTap: canGenerate ? onGenerate : null,
@@ -2775,11 +2700,10 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
     final canGenerate = selectedCount > 0;
     final sourceSummary = canGenerate
         ? '$selectedCount kaynak seçildi'
-        : 'Hazır kaynak yok';
+        : 'Kaynak seç';
     return _BaseForcePage(
-      title: 'Akış Şeması /\nAlgoritma',
-      subtitle:
-          'Kaynağından klinik karar, mekanizma ve sınav çözüm akışları üret.',
+      title: 'Akış Şeması / Algoritma',
+      subtitle: 'Kaynağındaki süreçleri adım adım takip edilebilir hale getir.',
       onSearch: onSearch,
       onBack: onBack,
       heroTight: true,
@@ -2998,7 +2922,11 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        const _FlowPreviewPanel(),
+        const _BaseNotice(
+          icon: Icons.account_tree_outlined,
+          text:
+              'Akış çıktısı, mevcut üretim sonucunun desteklediği metinsel yapı ile hazırlanır. Bu ekranda gerçek diagram renderer varmış gibi gösterim yapılmaz.',
+        ),
         const SizedBox(height: 18),
         _ProductionSummary(
           items: [
@@ -3022,15 +2950,15 @@ class _AlgorithmFactoryScreen extends StatelessWidget {
             ),
             _SummaryItemData(
               Icons.payments_outlined,
-              'Backend',
-              'MC hesaplar',
+              'Üretimde hesaplanır',
+              'MC maliyeti',
               AppColors.orange,
             ),
           ],
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: 'Algoritma üret',
+          label: canGenerate ? 'Akış oluştur' : 'Kaynak seç',
           icon: Icons.auto_awesome_rounded,
           height: 58,
           onTap: canGenerate ? onGenerate : null,
@@ -3098,11 +3026,11 @@ class _ComparisonFactoryScreen extends StatelessWidget {
     final canGenerate = selectedFiles.isNotEmpty && blockedFiles.isEmpty;
     final sourceSummary = canGenerate
         ? '${selectedFiles.length} kaynak seçildi'
-        : 'Hazır kaynak yok';
+        : 'Kaynak seç';
     return _BaseForcePage(
       title: 'Kar\u015F\u0131la\u015Ft\u0131rma Tablosu',
       subtitle:
-          'Kaynağından benzer kavramları, hastalıkları ve mekanizmaları net ayıran tablo üret.',
+          'Benzer kavramları farklarıyla birlikte tablo halinde karşılaştır.',
       onSearch: onSearch,
       onBack: onBack,
       heroTight: true,
@@ -3180,7 +3108,11 @@ class _ComparisonFactoryScreen extends StatelessWidget {
           onQualityTierChanged: onQualityTierChanged,
         ),
         const SizedBox(height: 10),
-        const _ComparisonPreviewTable(),
+        const _BaseNotice(
+          icon: Icons.table_chart_outlined,
+          text:
+              'Tablo çıktısı gerçek üretim sonucunda oluşturulur. Bu ekranda yalnızca kaynak ve üretim ayarları düzenlenir.',
+        ),
         const SizedBox(height: 18),
         _ProductionSummary(
           items: [
@@ -3202,6 +3134,12 @@ class _ComparisonFactoryScreen extends StatelessWidget {
               'Kalite',
               AppColors.orange,
             ),
+            _SummaryItemData(
+              Icons.payments_outlined,
+              'Üretimde hesaplanır',
+              'MC maliyeti',
+              AppColors.blue,
+            ),
           ],
         ),
         const SizedBox(height: 10),
@@ -3211,7 +3149,7 @@ class _ComparisonFactoryScreen extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         PrimaryGradientButton(
-          label: 'Karşılaştırma tablosu üret',
+          label: canGenerate ? 'Tablo oluştur' : 'Kaynak seç',
           icon: Icons.table_chart_outlined,
           height: 58,
           onTap: canGenerate ? onGenerate : null,
@@ -3300,7 +3238,7 @@ class _QueueScreen extends StatelessWidget {
               failed: false,
               progress: 1,
               time: gen.updatedLabel,
-              filterStatus: 'Tamamland\u0131',
+              filterStatus: 'Çıktı hazır',
               onAction: () => onOpenResult(
                 _GenerationResult(
                   kind: gen.kind,
@@ -3350,19 +3288,19 @@ class _QueueScreen extends StatelessWidget {
               icon: Icons.play_circle_outline_rounded,
               title: 'Devam Eden',
               value: '$runningCount',
-              subtitle: '\u0130\u015Fleniyor',
+              subtitle: 'Çıktı hazırlanıyor',
               color: AppColors.blue,
             ),
             _QueueMetric(
               icon: Icons.check_circle_rounded,
-              title: 'Tamamland\u0131',
+              title: 'Hazır',
               value: '$completedCount',
-              subtitle: 'Ba\u015Far\u0131yla bitti',
+              subtitle: 'Çıktı hazır',
               color: AppColors.green,
             ),
             _QueueMetric(
               icon: Icons.error_rounded,
-              title: 'Hata',
+              title: 'Başarısız',
               value: '$failedCount',
               subtitle: 'Tekrar denenebilir',
               color: AppColors.red,
@@ -3380,22 +3318,22 @@ class _QueueScreen extends StatelessWidget {
               onTap: () => onFilterChanged('T\xFCm\xFC'),
             ),
             _QueueFilter(
-              label: '\u0130\u015Fleniyor',
+              label: 'Çıktı hazırlanıyor',
               dot: AppColors.blue,
-              selected: queueFilter == '\u0130\u015Fleniyor',
-              onTap: () => onFilterChanged('\u0130\u015Fleniyor'),
+              selected: queueFilter == 'Çıktı hazırlanıyor',
+              onTap: () => onFilterChanged('Çıktı hazırlanıyor'),
             ),
             _QueueFilter(
-              label: 'Tamamland\u0131',
+              label: 'Çıktı hazır',
               dot: AppColors.green,
-              selected: queueFilter == 'Tamamland\u0131',
-              onTap: () => onFilterChanged('Tamamland\u0131'),
+              selected: queueFilter == 'Çıktı hazır',
+              onTap: () => onFilterChanged('Çıktı hazır'),
             ),
             _QueueFilter(
-              label: 'Hata',
+              label: 'Çıktı oluşturulamadı',
               dot: AppColors.red,
-              selected: queueFilter == 'Hata',
-              onTap: () => onFilterChanged('Hata'),
+              selected: queueFilter == 'Çıktı oluşturulamadı',
+              onTap: () => onFilterChanged('Çıktı oluşturulamadı'),
             ),
           ],
         ),
@@ -3425,7 +3363,6 @@ class _FlashcardResultsScreen extends StatelessWidget {
     required this.onSave,
     required this.onExport,
     required this.onRegenerate,
-    required this.onEdit,
   });
 
   final _GenerationResult? result;
@@ -3435,7 +3372,6 @@ class _FlashcardResultsScreen extends StatelessWidget {
   final VoidCallback onSave;
   final VoidCallback onExport;
   final VoidCallback onRegenerate;
-  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -3494,8 +3430,8 @@ class _FlashcardResultsScreen extends StatelessWidget {
                 onTap: onSave,
               ),
               _QuickResultAction(
-                icon: Icons.upload_rounded,
-                label: 'Dışa Aktar',
+                icon: Icons.content_copy_rounded,
+                label: 'Metni\nKopyala',
                 color: AppColors.green,
                 onTap: onExport,
               ),
@@ -3506,14 +3442,10 @@ class _FlashcardResultsScreen extends StatelessWidget {
                 onTap: onRegenerate,
               ),
               _QuickResultAction(
-                icon: current.kind == GeneratedKind.algorithm
-                    ? Icons.source_outlined
-                    : Icons.edit_outlined,
-                label: current.kind == GeneratedKind.algorithm
-                    ? 'Kaynağa\nDön'
-                    : 'Düzenle',
+                icon: Icons.tune_rounded,
+                label: 'Ayarları\nAç',
                 color: AppColors.orange,
-                onTap: onEdit,
+                onTap: onRegenerate,
               ),
             ],
           ),
@@ -3567,63 +3499,11 @@ class _GeneratedContentView extends StatelessWidget {
       );
     }
 
-    if (content is List) {
-      return withMeta(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < content.length; i++)
-              _GeneratedItemCard(index: i + 1, value: content[i]),
-          ],
-        ),
-      );
-    }
-    if (content is Map) {
-      final preferred = _preferredGeneratedList(content);
-      if (preferred != null && preferred.isNotEmpty) {
-        return withMeta(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if ((content['title']?.toString().trim() ?? '').isNotEmpty) ...[
-                Text(
-                  content['title'].toString(),
-                  style: const TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-              for (var i = 0; i < preferred.length; i++)
-                _GeneratedItemCard(index: i + 1, value: preferred[i]),
-            ],
-          ),
-        );
-      }
-      return withMeta(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final entry in content.entries)
-              _GeneratedKeyValue(
-                label: entry.key.toString(),
-                value: entry.value,
-              ),
-          ],
-        ),
-      );
-    }
     return withMeta(
-      Text(
-        content.toString(),
-        style: const TextStyle(
-          color: AppColors.navy,
-          fontSize: 16,
-          height: 1.45,
-          fontWeight: FontWeight.w500,
-        ),
+      GeneratedOutputReadableContent(
+        outputType: _baseForceOutputKind(result.kind),
+        title: result.title,
+        content: content,
       ),
     );
   }
@@ -3642,64 +3522,8 @@ class _GenericResultMetaGrid extends StatelessWidget {
       ('Tür', _baseForceKindLabel(result.kind)),
       ('MC', result.mcCostLabel ?? 'MC tutarı güvenli hesaplanır'),
     ];
-    return _ResponsiveGrid(
-      minItemWidth: 155,
-      children: [
-        for (final item in items)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FBFF),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.line),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.$1,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  item.$2,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
+    return GeneratedOutputMetaCard(items: items);
   }
-}
-
-List<Object?>? _preferredGeneratedList(Map<dynamic, dynamic> content) {
-  for (final key in const [
-    'cards',
-    'flashcards',
-    'questions',
-    'items',
-    'bulletPoints',
-    'steps',
-    'rows',
-    'segments',
-  ]) {
-    final value = content[key];
-    if (value is List) return value.cast<Object?>();
-  }
-  return null;
 }
 
 class _ComparisonResultView extends StatelessWidget {
@@ -4781,117 +4605,6 @@ String _algorithmInlineText(Object? value) {
   return text.isEmpty ? '-' : text;
 }
 
-class _GeneratedItemCard extends StatelessWidget {
-  const _GeneratedItemCard({required this.index, required this.value});
-
-  final int index;
-  final Object? value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFF),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 15,
-            backgroundColor: AppColors.selectedBlue,
-            child: Text(
-              '$index',
-              style: const TextStyle(
-                color: AppColors.blue,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: _GeneratedValue(value: value)),
-        ],
-      ),
-    );
-  }
-}
-
-class _GeneratedKeyValue extends StatelessWidget {
-  const _GeneratedKeyValue({required this.label, required this.value});
-
-  final String label;
-  final Object? value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.blue,
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          _GeneratedValue(value: value),
-        ],
-      ),
-    );
-  }
-}
-
-class _GeneratedValue extends StatelessWidget {
-  const _GeneratedValue({required this.value});
-
-  final Object? value;
-
-  @override
-  Widget build(BuildContext context) {
-    if (value is Map) {
-      final map = value as Map;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final entry in map.entries)
-            _GeneratedKeyValue(label: entry.key.toString(), value: entry.value),
-        ],
-      );
-    }
-    if (value is List) {
-      final list = value as List;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final item in list)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: _GeneratedValue(value: item),
-            ),
-        ],
-      );
-    }
-    return Text(
-      value?.toString().trim().isEmpty ?? true ? '-' : value.toString(),
-      softWrap: true,
-      style: const TextStyle(
-        color: AppColors.navy,
-        fontSize: 15,
-        height: 1.45,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
-}
-
 class _AllGenerationsScreen extends StatelessWidget {
   const _AllGenerationsScreen({
     required this.data,
@@ -5186,20 +4899,15 @@ class _ResponsiveGrid extends StatelessWidget {
 }
 
 class _TwoPane extends StatelessWidget {
-  const _TwoPane({
-    required this.left,
-    required this.right,
-    this.breakpoint = 760,
-    this.spacing = 12,
-  });
+  const _TwoPane({required this.left, required this.right});
 
   final Widget left;
   final Widget right;
-  final double breakpoint;
-  final double spacing;
 
   @override
   Widget build(BuildContext context) {
+    const breakpoint = 760.0;
+    const spacing = 12.0;
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < breakpoint) {
@@ -5389,18 +5097,18 @@ class _FactoryCard extends StatelessWidget {
           Text(
             title,
             textAlign: TextAlign.center,
-            maxLines: 2,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: AppColors.navy,
-              fontSize: compact ? 16 : 18,
+              fontSize: compact ? 15.5 : 17,
               height: 1.14,
               fontWeight: FontWeight.w900,
             ),
           ),
           SizedBox(height: compact ? 8 : 12),
           SizedBox(
-            height: compact ? 34 : 42,
+            height: compact ? 42 : 48,
             child: Text(
               subtitle,
               maxLines: compact ? 2 : 3,
@@ -5450,44 +5158,74 @@ class _RecentSourceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        child: Row(
-          children: [
-            FileKindBadge(kind: source.kind, plain: true),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    source.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.navy,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FileKindBadge(kind: source.kind, plain: true),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            source.name,
+                            maxLines: compact ? 2 : 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.navy,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${source.size}  •  ${source.time}  •  ${source.subject}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${source.size}  •  ${source.time}  •  ${source.subject}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 13.5,
-                    ),
+                    if (!compact) ...[
+                      const SizedBox(width: 10),
+                      _SuitabilityPill(
+                        label: source.suitabilityLabel,
+                        status: source.status,
+                        warning: !source.enabled,
+                      ),
+                      const _MoreMenuButton(),
+                    ],
+                  ],
+                ),
+                if (compact) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _SuitabilityPill(
+                        label: source.suitabilityLabel,
+                        status: source.status,
+                        warning: !source.enabled,
+                      ),
+                      const Spacer(),
+                      const _MoreMenuButton(),
+                    ],
                   ),
                 ],
-              ),
+              ],
             ),
-            const SizedBox(width: 10),
-            StatusPill(status: DriveItemStatus.completed, compact: true),
-            const _MoreMenuButton(),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -5613,89 +5351,6 @@ class _SearchBox extends StatelessWidget {
   }
 }
 
-class _FilterButton extends StatelessWidget {
-  const _FilterButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 62,
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: const Icon(Icons.filter_alt_outlined, size: 27),
-        label: const Text('Filtrele'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.navy,
-          side: const BorderSide(color: AppColors.line),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-        ),
-      ),
-    );
-  }
-}
-
-class _SourceFilter extends StatelessWidget {
-  const _SourceFilter({
-    required this.label,
-    this.selected = false,
-    this.icon,
-    this.kind,
-  });
-
-  final String label;
-  final bool selected;
-  final IconData? icon;
-  final DriveFileKind? kind;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = kind == null
-        ? AppColors.blue
-        : FileKindBadge.kindColor(kind!);
-    return InkWell(
-      onTap: () => _showBaseForceToast(
-        context,
-        'Filtreleme bu sürümde tüm kaynaklar görünümünde. Hazır rozetli kaynaklar üretime alınabilir.',
-      ),
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.selectedBlue : Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selected ? AppColors.blue : AppColors.line,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (kind != null)
-              FileKindBadge(kind: kind!, compact: true)
-            else if (icon != null)
-              Icon(icon, color: color, size: 24),
-            if (kind != null || icon != null) const SizedBox(width: 9),
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? AppColors.blue : AppColors.navy,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _SourceSelectRow extends StatelessWidget {
   const _SourceSelectRow({
     required this.source,
@@ -5712,60 +5367,96 @@ class _SourceSelectRow extends StatelessWidget {
     final enabled = source.enabled;
     return InkWell(
       onTap: enabled ? onTap : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Opacity(
-          opacity: enabled ? 1 : .58,
-          child: Row(
-            children: [
-              _CheckSquare(selected: selected && enabled, enabled: enabled),
-              const SizedBox(width: 16),
-              FileKindBadge(kind: source.kind, plain: false),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      source.name,
-                      style: const TextStyle(
-                        color: AppColors.navy,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Opacity(
+              opacity: enabled ? 1 : .58,
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _CheckSquare(
+                        selected: selected && enabled,
+                        enabled: enabled,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${source.size}  •  ${source.pages}',
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 14,
-                      ),
-                    ),
-                    if (source.blockedReason != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        source.blockedReason!,
-                        style: const TextStyle(
-                          color: AppColors.red,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(width: 12),
+                      FileKindBadge(kind: source.kind, plain: false),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              source.name,
+                              maxLines: compact ? 2 : 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.navy,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${source.size}  •  ${source.pages}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (source.blockedReason != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                source.blockedReason!,
+                                maxLines: compact ? 3 : 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.red,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
+                      if (!compact) ...[
+                        const SizedBox(width: 10),
+                        _SuitabilityPill(
+                          label: source.suitabilityLabel,
+                          status: source.status,
+                          warning: !enabled,
+                        ),
+                        const SizedBox(width: 10),
+                        const _MoreMenuButton(),
+                      ],
                     ],
+                  ),
+                  if (compact) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _SuitabilityPill(
+                          label: source.suitabilityLabel,
+                          status: source.status,
+                          warning: !enabled,
+                        ),
+                        const Spacer(),
+                        const _MoreMenuButton(),
+                      ],
+                    ),
                   ],
-                ),
+                ],
               ),
-              _SuitabilityPill(
-                label: source.suitabilityLabel,
-                status: source.status,
-                warning: !enabled,
-              ),
-              const SizedBox(width: 10),
-              const _MoreMenuButton(),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -5852,51 +5543,6 @@ class _SuitabilityPill extends StatelessWidget {
   }
 }
 
-class _UploadDropZone extends StatelessWidget {
-  const _UploadDropZone({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 26),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppColors.blue.withValues(alpha: .42),
-            style: BorderStyle.solid,
-          ),
-        ),
-        child: const Column(
-          children: [
-            Icon(Icons.cloud_upload_outlined, color: AppColors.blue, size: 34),
-            SizedBox(height: 8),
-            Text(
-              'Yeni dosya yükle',
-              style: TextStyle(
-                color: AppColors.blue,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'PDF, PPTX, DOCX formatları desteklenir.',
-              style: TextStyle(color: AppColors.muted, fontSize: 15),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _SelectedSourcesTray extends StatelessWidget {
   const _SelectedSourcesTray({
     required this.data,
@@ -5951,20 +5597,16 @@ class _SelectedSourcesTray extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final source in selected)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: _SelectedSourceChip(
-                      source: source,
-                      onRemove: () => onRemove(source.id),
-                    ),
-                  ),
-              ],
-            ),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final source in selected)
+                _SelectedSourceChip(
+                  source: source,
+                  onRemove: () => onRemove(source.id),
+                ),
+            ],
           ),
           const SizedBox(height: 14),
           SizedBox(
@@ -6003,35 +5645,42 @@ class _SelectedSourceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 42,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Row(
-        children: [
-          FileKindBadge(kind: source.kind, compact: true),
-          const SizedBox(width: 8),
-          Text(
-            source.name,
-            style: const TextStyle(
-              color: AppColors.navy,
-              fontWeight: FontWeight.w700,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Container(
+        height: 42,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Row(
+          children: [
+            FileKindBadge(kind: source.kind, compact: true),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                source.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-          IconButton(
-            onPressed: onRemove,
-            icon: const Icon(
-              Icons.close_rounded,
-              color: AppColors.muted,
-              size: 19,
+            IconButton(
+              onPressed: onRemove,
+              icon: const Icon(
+                Icons.close_rounded,
+                color: AppColors.muted,
+                size: 19,
+              ),
+              visualDensity: VisualDensity.compact,
             ),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -6757,74 +6406,6 @@ class _ToggleLineState extends State<_ToggleLine> {
   }
 }
 
-class _FlashCardFace extends StatelessWidget {
-  const _FlashCardFace({
-    required this.text,
-    required this.icon,
-    required this.onTap,
-    this.center = false,
-  });
-
-  final String text;
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool center;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        height: center ? 210 : 250,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFF4FAFF), Colors.white, Color(0xFFF7F3FF)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFAFC8FF)),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blue.withValues(alpha: .06),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Align(
-              alignment: center ? Alignment.center : Alignment.centerLeft,
-              child: Text(
-                text,
-                textAlign: center ? TextAlign.center : TextAlign.left,
-                style: TextStyle(
-                  color: AppColors.navy,
-                  fontSize: center ? 21 : 18,
-                  fontWeight: center ? FontWeight.w900 : FontWeight.w500,
-                  height: 1.38,
-                ),
-              ),
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Icon(
-                icon,
-                color: AppColors.blue.withValues(alpha: .22),
-                size: 35,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ProductionSummary extends StatelessWidget {
   const _ProductionSummary({required this.items});
 
@@ -6936,214 +6517,6 @@ class _ThinRule extends StatelessWidget {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: 14),
       child: Divider(color: AppColors.softLine, height: 1),
-    );
-  }
-}
-
-class _TagChip extends StatelessWidget {
-  const _TagChip({
-    required this.label,
-    this.color = AppColors.blue,
-    this.outlined = false,
-    this.icon,
-  });
-
-  final String label;
-  final Color color;
-  final bool outlined;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => _showBaseForceToast(
-        context,
-        'Alan etiketleri bu sürümde önizleme amaçlıdır. Üretim; soru tipi, zorluk ve açıklama ayarlarını kullanır.',
-      ),
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: outlined ? Colors.white : color.withValues(alpha: .10),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: outlined
-                ? AppColors.blue.withValues(alpha: .35)
-                : color.withValues(alpha: .12),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, color: AppColors.blue, size: 18),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
-              ),
-            ),
-            if (!outlined) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.close_rounded, color: color, size: 16),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QuestionPreview extends StatelessWidget {
-  const _QuestionPreview();
-
-  @override
-  Widget build(BuildContext context) {
-    return _BasePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text('Soru Önizleme', style: _titleStyle),
-          SizedBox(height: 14),
-          _QuestionLine(
-            number: '1.',
-            text:
-                'Aşağıdakilerden hangisi ACE inhibitörlerinin etki mekanizmasıyla ilişkilidir?',
-          ),
-          SizedBox(height: 10),
-          _AnswerOption(label: 'A) Renin salınımını artırırlar.'),
-          _AnswerOption(
-            label: 'B) Anjiyotensin II oluşumunu engellerler.',
-            selected: true,
-          ),
-          _AnswerOption(label: 'C) Aldosteron reseptörlerini bloke ederler.'),
-          _AnswerOption(label: 'D) Beta-1 adrenerjik reseptörleri uyarırlar.'),
-          _AnswerOption(label: 'E) Anjiyotensinojeni karaciğerde yıkarlar.'),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuestionLine extends StatelessWidget {
-  const _QuestionLine({required this.number, required this.text});
-
-  final String number;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: AppColors.blue,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            number,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: AppColors.navy,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              height: 1.28,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AnswerOption extends StatelessWidget {
-  const _AnswerOption({required this.label, this.selected = false});
-
-  final String label;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 7),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.selectedBlue : Colors.white,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: selected ? AppColors.blue : AppColors.line),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            selected
-                ? Icons.radio_button_checked_rounded
-                : Icons.radio_button_off_rounded,
-            color: selected ? AppColors.blue : AppColors.softText,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(color: AppColors.navy, fontSize: 14.5),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExplanationPreview extends StatelessWidget {
-  const _ExplanationPreview();
-
-  @override
-  Widget build(BuildContext context) {
-    return _BasePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 23,
-                backgroundColor: Color(0xFFEFE7FF),
-                child: Icon(
-                  Icons.auto_awesome_rounded,
-                  color: AppColors.purple,
-                ),
-              ),
-              SizedBox(width: 12),
-              Text('Açıklama Önizleme', style: _titleStyle),
-            ],
-          ),
-          SizedBox(height: 30),
-          Text(
-            'ACE inhibitörleri, anjiyotensin dönüştürücü enzimi inhibe ederek anjiyotensin I’in anjiyotensin II’ye dönüşümünü engeller. Bu etki vazodilatasyon ve aldosteron salınımının azalmasına yol açar.',
-            style: TextStyle(color: AppColors.navy, fontSize: 18, height: 1.55),
-          ),
-          SizedBox(height: 22),
-          _TagChip(
-            label: 'Kaynak: Farmakoloji Ders Notları.pdf',
-            color: AppColors.purple,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -7379,147 +6752,6 @@ class _RadioOptionState extends State<_RadioOption> {
   }
 }
 
-class _SummaryPreviewCard extends StatelessWidget {
-  const _SummaryPreviewCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Özet Önizleme', style: _titleStyle),
-        const SizedBox(height: 10),
-        _BasePanel(
-          child: const _TwoPane(
-            breakpoint: 700,
-            spacing: 18,
-            left: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Kardiyoloji - Temel Konular Özeti',
-                        style: TextStyle(
-                          color: AppColors.navy,
-                          fontSize: 21,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    _TagChip(label: 'Sınav Odaklı', color: AppColors.blue),
-                  ],
-                ),
-                SizedBox(height: 18),
-                Text(
-                  'Yüksek Olasılıklı Konular',
-                  style: TextStyle(
-                    color: AppColors.blue,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                SizedBox(height: 8),
-                _BulletText(text: 'Kalp debisi = Atım hacmi x Kalp hızı'),
-                _BulletText(text: 'Preload artışı -> Atım hacmi artar'),
-                _BulletText(text: 'Afterload artışı -> Atım hacmi azalır'),
-                _BulletText(text: 'Sistol: Ventriküllerin kasılması'),
-                _BulletText(
-                  text: 'Diastol: Ventriküllerin gevşemesi ve dolması',
-                ),
-                SizedBox(height: 18),
-                _CalloutBox(
-                  title: 'Hoca Vurgusu',
-                  text:
-                      'Preload, kalbe dönen kan miktarını; afterload ise kalbin kanı pompalarken karşılaştığı direnci ifade eder.',
-                ),
-              ],
-            ),
-            right: Column(
-              children: [_TinyTable(), SizedBox(height: 14), _ChecklistBox()],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BulletText extends StatelessWidget {
-  const _BulletText({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '• ',
-            style: TextStyle(color: AppColors.navy, fontSize: 17),
-          ),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: AppColors.navy,
-                fontSize: 15.5,
-                height: 1.3,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CalloutBox extends StatelessWidget {
-  const _CalloutBox({required this.title, required this.text});
-
-  final String title;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.greenBg.withValues(alpha: .55),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.green.withValues(alpha: .25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.green,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            text,
-            style: const TextStyle(
-              color: AppColors.navy,
-              fontSize: 14.5,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _BaseNotice extends StatelessWidget {
   const _BaseNotice({required this.icon, required this.text});
 
@@ -7551,127 +6783,6 @@ class _BaseNotice extends StatelessWidget {
                 height: 1.32,
                 fontWeight: FontWeight.w700,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TinyTable extends StatelessWidget {
-  const _TinyTable();
-
-  @override
-  Widget build(BuildContext context) {
-    const rows = [
-      ['Parametre', 'Tanım'],
-      ['Atım Hacmi', 'Her atımda pompalanan kan'],
-      ['Kalp Debisi', 'Dakikadaki toplam kan'],
-      ['Preload', 'Ventrikül doluş basıncı'],
-      ['Afterload', 'Damar direnci'],
-    ];
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.line),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          for (final row in rows)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppColors.softLine)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      row[0],
-                      style: const TextStyle(
-                        color: AppColors.navy,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      row[1],
-                      style: const TextStyle(
-                        color: AppColors.navy,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChecklistBox extends StatelessWidget {
-  const _ChecklistBox();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFBFAFF),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.purple.withValues(alpha: .22)),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Mini Check-list',
-            style: TextStyle(
-              color: AppColors.purple,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          SizedBox(height: 8),
-          _CheckText(text: 'Frank-Starling yasasını anladım.'),
-          _CheckText(text: 'Preload - Afterload ayrımını biliyorum.'),
-          _CheckText(text: 'Sistol - Diyastol fazlarını hatırladım.'),
-        ],
-      ),
-    );
-  }
-}
-
-class _CheckText extends StatelessWidget {
-  const _CheckText({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Row(
-        children: [
-          Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.muted),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: AppColors.navy, fontSize: 12.5),
             ),
           ),
         ],
@@ -7726,250 +6837,6 @@ class _SettingGridRow extends StatelessWidget {
           );
         },
       ),
-    );
-  }
-}
-
-class _FlowPreviewPanel extends StatelessWidget {
-  const _FlowPreviewPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return _BasePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: const [
-              Expanded(child: Text('Önizleme', style: _titleStyle)),
-              _IconBox(icon: Icons.open_in_full_rounded),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 350,
-            child: CustomPaint(
-              painter: _FlowPreviewPainter(),
-              child: const SizedBox.expand(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FlowPreviewPainter extends CustomPainter {
-  const _FlowPreviewPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = const Color(0xFF687DA0)
-      ..strokeWidth = 2;
-    final green = Paint()..color = const Color(0xFFEAFBF1);
-    final orange = Paint()..color = const Color(0xFFFFF3E8);
-    final purple = Paint()..color = const Color(0xFFF8F2FF);
-    void box(Rect rect, Paint paint, Color stroke, String text, IconData icon) {
-      final r = RRect.fromRectAndRadius(rect, const Radius.circular(8));
-      canvas.drawRRect(r, paint);
-      canvas.drawRRect(
-        r,
-        Paint()
-          ..color = stroke
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
-      );
-      final tp = TextPainter(
-        text: TextSpan(
-          text: text,
-          style: const TextStyle(
-            color: AppColors.navy,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        textAlign: TextAlign.center,
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: rect.width - 16);
-      tp.paint(
-        canvas,
-        Offset(
-          rect.left + (rect.width - tp.width) / 2,
-          rect.top + (rect.height - tp.height) / 2,
-        ),
-      );
-    }
-
-    void arrow(Offset a, Offset b) {
-      canvas.drawLine(a, b, line);
-      final angle = math.atan2(b.dy - a.dy, b.dx - a.dx);
-      final p1 =
-          b - Offset(math.cos(angle - .55) * 9, math.sin(angle - .55) * 9);
-      final p2 =
-          b - Offset(math.cos(angle + .55) * 9, math.sin(angle + .55) * 9);
-      canvas.drawPath(
-        Path()
-          ..moveTo(b.dx, b.dy)
-          ..lineTo(p1.dx, p1.dy)
-          ..lineTo(p2.dx, p2.dy)
-          ..close(),
-        line,
-      );
-    }
-
-    final top = Rect.fromCenter(
-      center: Offset(size.width / 2, 34),
-      width: 230,
-      height: 54,
-    );
-    box(
-      top,
-      Paint()..color = AppColors.selectedBlue,
-      AppColors.blue,
-      'Göğüs Ağrısı\n(Olası Kardiyak)',
-      Icons.monitor_heart_outlined,
-    );
-    final diamondCenter = Offset(size.width / 2, 126);
-    final diamond = Path()
-      ..moveTo(diamondCenter.dx, diamondCenter.dy - 48)
-      ..lineTo(diamondCenter.dx + 82, diamondCenter.dy)
-      ..lineTo(diamondCenter.dx, diamondCenter.dy + 48)
-      ..lineTo(diamondCenter.dx - 82, diamondCenter.dy)
-      ..close();
-    canvas.drawPath(diamond, purple);
-    canvas.drawPath(
-      diamond,
-      Paint()
-        ..color = AppColors.purple
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4,
-    );
-    final question = TextPainter(
-      text: const TextSpan(
-        text: 'ST Elevasyonu\nVar mı?',
-        style: TextStyle(
-          color: AppColors.navy,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: 130);
-    question.paint(
-      canvas,
-      Offset(
-        diamondCenter.dx - question.width / 2,
-        diamondCenter.dy - question.height / 2,
-      ),
-    );
-    arrow(Offset(size.width / 2, 61), Offset(size.width / 2, 78));
-
-    final leftX = size.width * .22;
-    final rightX = size.width * .74;
-    box(
-      Rect.fromCenter(center: Offset(leftX, 184), width: 170, height: 48),
-      green,
-      AppColors.green,
-      'STEMI',
-      Icons.favorite_rounded,
-    );
-    box(
-      Rect.fromCenter(center: Offset(leftX, 254), width: 170, height: 48),
-      green,
-      AppColors.green,
-      'Acil Reperfüzyon\n(PPK / Primer PCI)',
-      Icons.local_hospital_outlined,
-    );
-    box(
-      Rect.fromCenter(center: Offset(leftX, 322), width: 170, height: 48),
-      green,
-      AppColors.green,
-      'Koroner Yoğun Bakım\nve İzlem',
-      Icons.bed_rounded,
-    );
-    box(
-      Rect.fromCenter(center: Offset(rightX, 184), width: 190, height: 48),
-      orange,
-      AppColors.orange,
-      'Yüksek Riskli\nNSTEMI / UA',
-      Icons.warning_amber_rounded,
-    );
-    box(
-      Rect.fromCenter(center: Offset(rightX, 254), width: 190, height: 48),
-      orange,
-      AppColors.orange,
-      'Risk Skoru ve Tanısal\nDeğerlendirme',
-      Icons.analytics_outlined,
-    );
-    box(
-      Rect.fromCenter(center: Offset(rightX - 86, 324), width: 156, height: 48),
-      Paint()..color = const Color(0xFFFFFAEC),
-      const Color(0xFFDCA32E),
-      'İnvaziv Strateji',
-      Icons.timeline_rounded,
-    );
-    box(
-      Rect.fromCenter(center: Offset(rightX + 86, 324), width: 156, height: 48),
-      Paint()..color = const Color(0xFFFFFAEC),
-      const Color(0xFFDCA32E),
-      'İlaç Tedavisi ve\nYakın İzlem',
-      Icons.medication_outlined,
-    );
-    arrow(Offset(diamondCenter.dx - 82, diamondCenter.dy), Offset(leftX, 160));
-    arrow(Offset(diamondCenter.dx + 82, diamondCenter.dy), Offset(rightX, 160));
-    arrow(Offset(leftX, 208), Offset(leftX, 230));
-    arrow(Offset(leftX, 278), Offset(leftX, 298));
-    arrow(Offset(rightX, 208), Offset(rightX, 230));
-    arrow(Offset(rightX, 278), Offset(rightX - 86, 300));
-    arrow(Offset(rightX, 278), Offset(rightX + 86, 300));
-    final yes = TextPainter(
-      text: const TextSpan(
-        text: 'Evet',
-        style: TextStyle(
-          color: AppColors.green,
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    yes.paint(canvas, Offset(size.width * .30, 130));
-    final no = TextPainter(
-      text: const TextSpan(
-        text: 'Hayır',
-        style: TextStyle(
-          color: AppColors.red,
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    no.paint(canvas, Offset(size.width * .64, 130));
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _IconBox extends StatelessWidget {
-  const _IconBox({required this.icon});
-
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Icon(icon, color: AppColors.navy, size: 22),
     );
   }
 }
@@ -8295,104 +7162,6 @@ class _ComparisonChoiceCard extends StatelessWidget {
   }
 }
 
-class _ComparisonPreviewTable extends StatelessWidget {
-  const _ComparisonPreviewTable();
-
-  @override
-  Widget build(BuildContext context) {
-    const rows = [
-      [
-        'Crohn - Tanım',
-        'Kronik, segmental inflamatuar barsak hastalığıdır.',
-        'Kronik inflamatuar barsak hastalığıdır.',
-        'Benzer',
-      ],
-      [
-        'Crohn - Etiyoloji',
-        'Genetik, immünolojik ve çevresel faktörler rol oynar.',
-        'Multifaktöriyel; genetik ve immünolojik faktörler önemlidir.',
-        'Benzer',
-      ],
-      [
-        'Crohn - Klinik',
-        'Karın ağrısı, ishal, kilo kaybı görülebilir.',
-        'Kilo kaybı, karın ağrısı, ishal en sık bulgulardır.',
-        'Benzer',
-      ],
-      [
-        'Ülseratif Kolit - Klinik',
-        'Hematokezya, tenesmus, ishal tipiktir.',
-        'Kanlı ishal, tenesmus ve karın krampları görülebilir.',
-        'Farklı',
-      ],
-    ];
-    return _BasePanel(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Önizleme', style: _titleStyle),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final tableWidth = math.max(constraints.maxWidth, 720.0);
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: tableWidth,
-                    child: Table(
-                      border: TableBorder.all(color: AppColors.line),
-                      columnWidths: const {
-                        0: FlexColumnWidth(1.2),
-                        1: FlexColumnWidth(1.65),
-                        2: FlexColumnWidth(1.65),
-                        3: FlexColumnWidth(.9),
-                      },
-                      children: [
-                        const TableRow(
-                          decoration: BoxDecoration(color: Color(0xFFF5FAFF)),
-                          children: [
-                            _TableCell(text: 'Konu', bold: true),
-                            _TableCell(
-                              text: 'Farmakoloji Ders Notları.pdf',
-                              bold: true,
-                            ),
-                            _TableCell(
-                              text: 'Kardiyovasküler Sistem.pptx',
-                              bold: true,
-                            ),
-                            _TableCell(text: 'Fark / Benzerlik', bold: true),
-                          ],
-                        ),
-                        for (final row in rows)
-                          TableRow(
-                            children: [
-                              _TableCell(text: row[0]),
-                              _TableCell(text: row[1]),
-                              _TableCell(text: row[2]),
-                              Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: _SimilarityPill(
-                                  different: row[3] == 'Farklı',
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _TableCell extends StatelessWidget {
   const _TableCell({required this.text, this.bold = false});
 
@@ -8410,37 +7179,6 @@ class _TableCell extends StatelessWidget {
           fontSize: 12.5,
           height: 1.25,
           fontWeight: bold ? FontWeight.w900 : FontWeight.w500,
-        ),
-      ),
-    );
-  }
-}
-
-class _SimilarityPill extends StatelessWidget {
-  const _SimilarityPill({required this.different});
-
-  final bool different;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: different ? AppColors.redBg : AppColors.greenBg,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: different
-              ? AppColors.red.withValues(alpha: .12)
-              : AppColors.green.withValues(alpha: .12),
-        ),
-      ),
-      child: Text(
-        different ? 'Farklı' : 'Benzer',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: different ? AppColors.red : AppColors.green,
-          fontWeight: FontWeight.w900,
-          fontSize: 13,
         ),
       ),
     );

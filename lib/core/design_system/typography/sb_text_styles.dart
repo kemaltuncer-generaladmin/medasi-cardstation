@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// SourceBase Typography System
-/// 
+///
 /// Standardized text styles following 8px-based scale.
 /// Font sizes: 12, 14, 16, 18, 20, 24, 32, 40, 48
 class SBTextStyles {

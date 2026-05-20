@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../../drive/presentation/screens/drive_workspace_screen.dart';
 import '../../data/sourcebase_auth_backend.dart';
 import '../widgets/auth_widgets.dart';
@@ -175,12 +176,11 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
       return AuthScreenFrame(
         children: [
           const AuthHeader(
-            title: 'Yeni şifre\nbelirle',
-            subtitle:
-                'Hesabına tekrar güvenli şekilde\nerişmek için yeni şifreni gir.',
+            title: 'Yeni şifre belirle',
+            subtitle: 'Hesabına güvenli şekilde erişmek için yeni şifreni gir.',
             art: AuthArtType.forgot,
           ),
-          const SizedBox(height: 44),
+          const SizedBox(height: 28),
           AuthTextField(
             icon: Icons.lock_outline_rounded,
             hint: 'Yeni şifre',
@@ -192,9 +192,7 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
               tooltip: _obscurePassword ? 'Şifreyi göster' : 'Şifreyi gizle',
               onPressed: _saving
                   ? null
-                  : () => setState(
-                        () => _obscurePassword = !_obscurePassword,
-                      ),
+                  : () => setState(() => _obscurePassword = !_obscurePassword),
               icon: Icon(
                 _obscurePassword
                     ? Icons.visibility_outlined
@@ -218,9 +216,8 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
               onPressed: _saving
                   ? null
                   : () => setState(
-                        () => _obscureRepeatPassword =
-                            !_obscureRepeatPassword,
-                      ),
+                      () => _obscureRepeatPassword = !_obscureRepeatPassword,
+                    ),
               icon: Icon(
                 _obscureRepeatPassword
                     ? Icons.visibility_outlined
@@ -232,7 +229,7 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
             const SizedBox(height: 14),
             AuthStatusBox(message: _errorMessage!),
           ],
-          const SizedBox(height: 30),
+          const SizedBox(height: 24),
           GradientActionButton(
             label: _saving ? 'Kaydediliyor...' : 'Şifreyi güncelle',
             onPressed: _saving ? null : _savePassword,
@@ -246,29 +243,16 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
       );
     }
 
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 18),
-                Text(
-                  _statusMessage ??
-                      (_checking
-                          ? 'Oturum hazırlanıyor...'
-                          : 'Yönlendiriliyor...'),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ],
-            ),
-          ),
+    return AuthScreenFrame(
+      children: [
+        SourceBaseLoadingState(
+          icon: Icons.verified_user_outlined,
+          title: 'Oturum hazırlanıyor',
+          message:
+              _statusMessage ??
+              (_checking ? 'Oturum doğrulanıyor.' : 'Yönlendiriliyorsun.'),
         ),
-      ),
+      ],
     );
   }
 }

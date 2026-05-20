@@ -359,7 +359,7 @@ class SourceBaseAuthBackend {
       if (message.contains('giriş yöntemi') ||
           message.contains('unsupported provider') ||
           message.contains('provider is not enabled')) {
-        return 'Bu giriş yöntemi şu anda aktif değil.';
+        return 'Bu giriş yöntemi şu anda aktif değil. E-posta ile giriş yapabilirsin.';
       }
       if (message.contains('otp') ||
           message.contains('token') ||

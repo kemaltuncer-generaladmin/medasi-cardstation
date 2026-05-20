@@ -4,16 +4,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../data/drive_models.dart';
 import '../widgets/drive_ui.dart';
 
-String _driveStatusLabel(DriveItemStatus status) {
-  return switch (status) {
-    DriveItemStatus.completed => 'Tamamlandı',
-    DriveItemStatus.processing => 'İşleniyor',
-    DriveItemStatus.uploading => 'Yükleniyor',
-    DriveItemStatus.failed => 'Hata',
-    DriveItemStatus.draft => 'Taslak',
-  };
-}
-
 class DriveHomeScreen extends StatelessWidget {
   const DriveHomeScreen({
     required this.data,
@@ -46,12 +36,38 @@ class DriveHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasCourses = data.courses.isNotEmpty;
     final mobile = MediaQuery.sizeOf(context).width < 430;
+    final files = [
+      for (final course in data.courses)
+        for (final section in course.sections) ...section.files,
+    ];
 
     return WorkspaceScroll(
       onRefresh: onRefresh,
       children: [
         DriveTopBar(title: 'Drive', onSearch: onSearch),
-        _HeroPanel(onUpload: onOpenUploads),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 760;
+            final upload = _HeroPanel(onUpload: onOpenUploads);
+            final stats = _DriveStatusSummary(
+              files: files,
+              onUpload: onOpenUploads,
+            );
+            if (compact) {
+              return Column(
+                children: [upload, const SizedBox(height: 12), stats],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 6, child: upload),
+                const SizedBox(width: 14),
+                Expanded(flex: 4, child: stats),
+              ],
+            );
+          },
+        ),
         SizedBox(height: mobile ? 12 : 16),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -152,7 +168,7 @@ class _HeroPanel extends StatelessWidget {
     return Semantics(
       container: true,
       explicitChildNodes: true,
-      label: 'Kaynak Üssün tanıtım paneli',
+      label: 'Kaynak yükleme alanı',
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 680;
@@ -189,7 +205,7 @@ class _HeroPanel extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: const Text(
-                          'Drive',
+                          'Upload',
                           style: TextStyle(
                             color: AppColors.deepBlue,
                             fontWeight: FontWeight.w800,
@@ -197,29 +213,28 @@ class _HeroPanel extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: mobile ? 14 : 20),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Kaynak Üssün',
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: AppColors.navy,
-                            fontSize: mobile ? 38 : 46,
-                            fontWeight: FontWeight.w900,
-                            height: 1.05,
-                          ),
+                      Text(
+                        'Kaynağını buraya yükle',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.navy,
+                          fontSize: mobile ? 28 : 34,
+                          fontWeight: FontWeight.w900,
+                          height: 1.08,
                         ),
                       ),
                       SizedBox(height: mobile ? 10 : 16),
                       Text(
-                        'Derslerini oluştur, bölümler ekle ve\nmateryallerini öğrenme araçlarına dönüştür.',
+                        'PDF, PPTX veya DOCX dosyanı ekleyerek çalışmaya başlayabilirsin.',
                         style: TextStyle(
                           color: AppColors.muted,
-                          fontSize: mobile ? 17 : 20,
+                          fontSize: mobile ? 15 : 17,
                           height: mobile ? 1.28 : 1.42,
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      const _FormatSupportText(),
                       if (compact && !mobile) ...[
                         const SizedBox(height: 10),
                         Align(
@@ -233,12 +248,14 @@ class _HeroPanel extends StatelessWidget {
                       ],
                       SizedBox(height: mobile ? 14 : 28),
                       SizedBox(
-                        width: mobile ? double.infinity : 218,
+                        width: mobile ? double.infinity : 220,
                         child: SBPrimaryButton(
-                          label: 'Kaynak Oluştur',
-                          icon: Icons.add_rounded,
+                          label: 'Kaynak yükle',
+                          icon: Icons.cloud_upload_outlined,
                           onPressed: onUpload,
-                          size: mobile ? SBButtonSize.medium : SBButtonSize.large,
+                          size: mobile
+                              ? SBButtonSize.medium
+                              : SBButtonSize.large,
                           fullWidth: mobile,
                         ),
                       ),
@@ -249,6 +266,163 @@ class _HeroPanel extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _FormatSupportText extends StatelessWidget {
+  const _FormatSupportText();
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: const [
+        _SupportChip(label: 'PDF', message: 'Metin içeren PDF'),
+        _SupportChip(label: 'PPTX', message: 'Önerilen sunum formatı'),
+        _SupportChip(label: 'DOCX', message: 'Önerilen doküman formatı'),
+        _SupportChip(label: 'PPT/DOC', message: 'Sınırlı destek'),
+      ],
+    );
+  }
+}
+
+class _SupportChip extends StatelessWidget {
+  const _SupportChip({required this.label, required this.message});
+
+  final String label;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: message,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppColors.selectedBlue,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.softLine),
+        ),
+        child: Text(
+          '$label · $message',
+          style: const TextStyle(
+            color: AppColors.navy,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DriveStatusSummary extends StatelessWidget {
+  const _DriveStatusSummary({required this.files, required this.onUpload});
+
+  final List<DriveFile> files;
+  final VoidCallback onUpload;
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = files.where(driveFileUsableForGeneration).length;
+    final processing = files
+        .where((file) => file.status == DriveItemStatus.processing)
+        .length;
+    final failed = files
+        .where((file) => file.status == DriveItemStatus.failed)
+        .length;
+    final nextAction = files.isEmpty
+        ? 'İlk kaynağını yükle.'
+        : processing > 0
+        ? 'İşlenen kaynaklar tamamlanınca üretime geçebilirsin.'
+        : ready > 0
+        ? 'Hazır kaynaklarınla BaseForce veya SourceLab içinde çıktı üret.'
+        : 'Hatalı kaynakları kontrol edip tekrar yüklemeyi dene.';
+
+    return GlassPanel(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Kaynak durumu',
+            style: TextStyle(
+              color: AppColors.navy,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _DriveMetricRow(label: 'Toplam kaynak', value: files.length),
+          _DriveMetricRow(label: 'Hazır', value: ready, color: AppColors.green),
+          _DriveMetricRow(
+            label: 'İşleniyor',
+            value: processing,
+            color: AppColors.blue,
+          ),
+          _DriveMetricRow(label: 'Hatalı', value: failed, color: AppColors.red),
+          const Divider(height: 24, color: AppColors.line),
+          Text(
+            nextAction,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 14,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SBSecondaryButton(
+            label: 'Kaynak yükle',
+            icon: Icons.cloud_upload_outlined,
+            onPressed: onUpload,
+            size: SBButtonSize.small,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DriveMetricRow extends StatelessWidget {
+  const _DriveMetricRow({
+    required this.label,
+    required this.value,
+    this.color = AppColors.navy,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            value.toString(),
+            style: TextStyle(
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -280,7 +454,7 @@ class _CourseEmptyPanel extends StatelessWidget {
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 420),
             child: const Text(
-              'İlk dersini oluşturarak içeriklerini düzenlemeye ve öğrencilerinle paylaşmaya başlayabilirsin.',
+              'İlk PDF, PPTX veya DOCX kaynağını yüklemek için önce bir ders alanı oluştur.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.muted,
@@ -333,7 +507,7 @@ class _HomeStorageOverview extends StatelessWidget {
                   icon: Icons.folder_open_rounded,
                   message: 'Henüz yüklenmiş dosya yok.',
                   subMessage:
-                      'Dosyalarını buraya yükleyip AI ile işleyebilirsin.',
+                      'İlk PDF veya PPTX dosyanı yükleyerek SourceBase çıktıları üretmeye başlayabilirsin.',
                   onTap: onOpenUploads,
                 )
               : Column(
@@ -929,9 +1103,7 @@ class _RecentUploadRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusLabel = file.status == DriveItemStatus.uploading
-        ? 'Yükleniyor...'
-        : _driveStatusLabel(file.status);
+    final statusLabel = driveStatusLabel(file.status);
     return Semantics(
       button: true,
       label:
@@ -967,9 +1139,21 @@ class _RecentUploadRow extends StatelessWidget {
                           const MetaDot(),
                           Text(file.updatedLabel),
                           const MetaDot(),
-                          Text(file.tag ?? file.courseTitle),
+                          Text(statusLabel),
                         ],
                       ),
+                      if (!driveFileUsableForGeneration(file)) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          driveFriendlyStatusDescription(file),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

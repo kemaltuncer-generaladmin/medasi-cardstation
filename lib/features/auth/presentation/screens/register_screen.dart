@@ -121,17 +121,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: [
         const AuthHeader(
           title: 'Hesap oluştur',
-          subtitle: 'Kaynağını yükle, öğrenme\nsistemini oluştur.',
+          subtitle:
+              'SourceBase hesabını oluştur ve kaynaklarını düzenlemeye başla.',
           art: AuthArtType.register,
         ),
-        const SizedBox(height: 34),
+        const SizedBox(height: 24),
         AuthTextField(
           icon: Icons.person_outline_rounded,
           hint: 'Ad Soyad',
           controller: nameController,
           textInputAction: TextInputAction.next,
         ),
-        const SizedBox(height: 13),
+        const SizedBox(height: 12),
         AuthTextField(
           icon: Icons.mail_outline_rounded,
           hint: 'E-posta',
@@ -139,7 +140,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
         ),
-        const SizedBox(height: 13),
+        const SizedBox(height: 12),
         AuthTextField(
           icon: Icons.lock_outline_rounded,
           hint: 'Şifre',
@@ -155,7 +156,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 13),
+        const SizedBox(height: 12),
         AuthTextField(
           icon: Icons.lock_outline_rounded,
           hint: 'Şifre Tekrar',
@@ -188,7 +189,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   style: TextStyle(
                     fontFamily: 'SF Pro Display',
                     color: AppColors.navy,
-                    fontSize: 18,
+                    fontSize: 14,
                     height: 1.34,
                   ),
                   children: [
@@ -212,14 +213,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 12),
           AuthStatusBox(message: errorMessage!),
         ],
-        const SizedBox(height: 22),
+        const SizedBox(height: 18),
         SBPrimaryButton(
           label: 'Kayıt Ol',
           onPressed: loading ? null : _signUp,
           loading: loading,
           size: SBButtonSize.large,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         SBSecondaryButton(
           label: 'Giriş Yap',
           onPressed: loading

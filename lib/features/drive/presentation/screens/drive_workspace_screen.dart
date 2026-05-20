@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:responsive_builder/responsive_builder.dart';
 
+import '../../../../core/design_system/layout/responsive_scaffold.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/data/sourcebase_auth_backend.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
@@ -1044,12 +1044,12 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
       return 'Oturum süren doldu. Lütfen tekrar giriş yap.';
     }
     if (text.contains('INSUFFICIENT_MC')) {
-      return 'MedAsiCoin bakiyen yetersiz. Mağazadan paket alıp tekrar deneyebilirsin.';
+      return 'MC bakiyen yetersiz. Paket alıp tekrar deneyebilirsin.';
     }
     if (text.contains('refund') ||
         text.contains('iade') ||
         text.contains('WALLET_ERROR')) {
-      return 'İşlem tamamlanamadı. Rezerve edilen MedAsiCoin varsa otomatik olarak iade edilir.';
+      return 'İşlem tamamlanamadı. Rezerve edilen MC varsa otomatik olarak iade edilir.';
     }
     if (text.contains('Unexpected SourceBase response') ||
         text.contains('Drive workspace response is empty') ||
@@ -1257,10 +1257,23 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ScreenTypeLayout.builder(
-      mobile: (context) => _MobileLayout(screen: _buildScreen(), state: this),
-      tablet: (context) => _TabletLayout(screen: _buildScreen(), state: this),
-      desktop: (context) => _DesktopLayout(screen: _buildScreen(), state: this),
+    return ResponsiveScaffold(
+      body: _buildScreen(),
+      busy: busy,
+      mobileNavigation: SourceBaseBottomNav(
+        selectedIndex: _selectedNavIndex,
+        onChanged: _onNavChanged,
+      ),
+      tabletNavigation: SourceBaseNavRail(
+        selectedIndex: _selectedNavIndex,
+        onChanged: _onNavChanged,
+        extended: false,
+      ),
+      desktopNavigation: SourceBaseNavRail(
+        selectedIndex: _selectedNavIndex,
+        onChanged: _onNavChanged,
+        extended: true,
+      ),
     );
   }
 
@@ -1374,6 +1387,7 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
                 WorkspaceRouteKey.sourceLab => SourceLabScreen(
                   data: workspace,
                   onSearch: _openGlobalFileSearch,
+                  onOpenDrive: () => _go(WorkspaceRouteKey.home),
                 ),
                 WorkspaceRouteKey.profile => ProfileScreen(
                   onSearch: _openGlobalFileSearch,
@@ -1385,107 +1399,6 @@ class _DriveWorkspaceScreenState extends State<DriveWorkspaceScreen> {
                 ),
               },
             ),
-    );
-  }
-}
-
-class _MobileLayout extends StatelessWidget {
-  const _MobileLayout({required this.screen, required this.state});
-
-  final Widget screen;
-  final _DriveWorkspaceScreenState state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          screen,
-          SourceBaseBottomNav(
-            selectedIndex: state._selectedNavIndex,
-            onChanged: state._onNavChanged,
-          ),
-          if (state.busy)
-            const Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              child: LinearProgressIndicator(minHeight: 3),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TabletLayout extends StatelessWidget {
-  const _TabletLayout({required this.screen, required this.state});
-
-  final Widget screen;
-  final _DriveWorkspaceScreenState state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Row(
-        children: [
-          SourceBaseNavRail(
-            selectedIndex: state._selectedNavIndex,
-            onChanged: state._onNavChanged,
-            extended: false,
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                screen,
-                if (state.busy)
-                  const Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    child: LinearProgressIndicator(minHeight: 3),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DesktopLayout extends StatelessWidget {
-  const _DesktopLayout({required this.screen, required this.state});
-
-  final Widget screen;
-  final _DriveWorkspaceScreenState state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Row(
-        children: [
-          SourceBaseNavRail(
-            selectedIndex: state._selectedNavIndex,
-            onChanged: state._onNavChanged,
-            extended: true,
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                screen,
-                if (state.busy)
-                  const Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    child: LinearProgressIndicator(minHeight: 3),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

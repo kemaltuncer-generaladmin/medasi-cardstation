@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/responsive_layout.dart';
 import '../../../../core/widgets/sourcebase_brand.dart';
 
 class AuthScreenFrame extends StatelessWidget {
@@ -11,6 +13,7 @@ class AuthScreenFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.page,
       body: Semantics(
         container: true,
         explicitChildNodes: true,
@@ -21,9 +24,11 @@ class AuthScreenFrame extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final viewInsets = MediaQuery.viewInsetsOf(context);
-                final width = MediaQuery.sizeOf(context).width;
-                final horizontalPadding = width < 390 ? 20.0 : 36.0;
+                final horizontalPadding = ResponsiveLayout.getHorizontalPadding(
+                  context,
+                );
                 final useCard = constraints.maxWidth >= 700;
+                final maxWidth = useCard ? 520.0 : double.infinity;
                 final content = Semantics(
                   container: true,
                   explicitChildNodes: true,
@@ -34,16 +39,16 @@ class AuthScreenFrame extends StatelessWidget {
                 );
                 return Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
+                    constraints: BoxConstraints(maxWidth: maxWidth),
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: EdgeInsets.fromLTRB(
                         horizontalPadding,
-                        28,
+                        24,
                         horizontalPadding,
-                        28 + viewInsets.bottom,
+                        24 + viewInsets.bottom,
                       ),
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
@@ -55,20 +60,14 @@ class AuthScreenFrame extends StatelessWidget {
                         ),
                         child: useCard
                             ? Container(
-                                padding: const EdgeInsets.all(26),
+                                padding: const EdgeInsets.all(28),
                                 decoration: BoxDecoration(
-                                  color: AppColors.white.withValues(alpha: .88),
-                                  borderRadius: BorderRadius.circular(24),
+                                  color: AppColors.white.withValues(alpha: .92),
+                                  borderRadius: BorderRadius.circular(
+                                    SBDimensions.cardRadius,
+                                  ),
                                   border: Border.all(color: AppColors.softLine),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.navy.withValues(
-                                        alpha: .08,
-                                      ),
-                                      blurRadius: 30,
-                                      offset: const Offset(0, 16),
-                                    ),
-                                  ],
+                                  boxShadow: SBShadows.card,
                                 ),
                                 child: content,
                               )
@@ -101,11 +100,16 @@ class AuthHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final compactLayout = width < 390;
-    final artSize = compactLayout ? 156.0 : 210.0;
-    final titleSize = compactLayout ? 38.0 : 46.0;
-    final subtitleSize = compactLayout ? 18.0 : 21.0;
-    final brandGap = compactLayout ? 58.0 : 88.0;
+    final compactLayout = width < 430;
+    final artSize = compactLayout ? 112.0 : 156.0;
+    final titleStyle =
+        (compactLayout ? SBTextStyles.heading1 : SBTextStyles.display2)
+            .copyWith(color: AppColors.navy);
+    final subtitleStyle = SBTextStyles.bodyMedium.copyWith(
+      color: AppColors.muted,
+      fontWeight: FontWeight.w500,
+    );
+    final brandGap = compactLayout ? 40.0 : 58.0;
 
     return Semantics(
       container: true,
@@ -131,25 +135,10 @@ class AuthHeader extends StatelessWidget {
                 title,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.navy,
-                  fontSize: titleSize,
-                  height: 1.08,
-                  letterSpacing: 0,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: titleStyle,
               ),
-              const SizedBox(height: 18),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: AppColors.muted,
-                  fontSize: subtitleSize,
-                  height: 1.34,
-                  letterSpacing: 0,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
+              const SizedBox(height: 12),
+              Text(subtitle, style: subtitleStyle),
             ],
           ),
         ],
@@ -184,58 +173,57 @@ class AuthTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 58,
-      decoration: BoxDecoration(
-        color: AppColors.white.withValues(alpha: .96),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: AppColors.line),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF234B86).withValues(alpha: .05),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 17),
-          Icon(icon, color: AppColors.blue, size: 26),
-          const SizedBox(width: 17),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              obscureText: obscureText,
-              keyboardType: keyboardType,
-              textInputAction: textInputAction,
-              onSubmitted: onSubmitted,
-              autofillHints: autofillHints,
-              cursorColor: AppColors.blue,
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-                hintText: hint,
-                hintStyle: const TextStyle(
-                  color: Color(0xFF9DA8C0),
-                  fontSize: 21,
-                  fontWeight: FontWeight.w500,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: SBDimensions.inputHeight),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.white.withValues(alpha: .96),
+          borderRadius: BorderRadius.circular(SBDimensions.inputRadius),
+          border: Border.all(color: AppColors.line),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF234B86).withValues(alpha: .05),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 16),
+            Icon(icon, color: AppColors.blue, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                obscureText: obscureText,
+                keyboardType: keyboardType,
+                textInputAction: textInputAction,
+                onSubmitted: onSubmitted,
+                autofillHints: autofillHints,
+                cursorColor: AppColors.blue,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  isDense: true,
+                  hintText: hint,
+                  hintStyle: SBTextStyles.bodyMedium.copyWith(
+                    color: AppColors.softText,
+                  ),
+                ),
+                style: SBTextStyles.bodyMedium.copyWith(
+                  color: AppColors.navy,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              style: const TextStyle(
-                color: AppColors.navy,
-                fontSize: 19,
-                fontWeight: FontWeight.w600,
+            ),
+            if (trailing != null)
+              IconTheme(
+                data: const IconThemeData(color: Color(0xFF7C89A6), size: 24),
+                child: trailing!,
               ),
-            ),
-          ),
-          if (trailing != null)
-            IconTheme(
-              data: const IconThemeData(color: Color(0xFF7C89A6), size: 26),
-              child: trailing!,
-            ),
-          const SizedBox(width: 12),
-        ],
+            const SizedBox(width: 10),
+          ],
+        ),
       ),
     );
   }
@@ -255,44 +243,10 @@ class GradientActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: height,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blue.withValues(alpha: .24),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: ElevatedButton(
-          onPressed: onPressed,
-          style: ElevatedButton.styleFrom(
-            elevation: 0,
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            disabledForegroundColor: AppColors.muted,
-            foregroundColor: AppColors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            textStyle: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0,
-            ),
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(label, maxLines: 1),
-          ),
-        ),
-      ),
+    return SourceBaseButton(
+      label: label,
+      onPressed: onPressed,
+      size: height >= 64 ? SBButtonSize.large : SBButtonSize.medium,
     );
   }
 }
@@ -311,28 +265,11 @@ class OutlineActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: height,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.blue,
-          side: const BorderSide(color: AppColors.blue, width: 1.2),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 21,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0,
-          ),
-        ),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(label, maxLines: 1),
-        ),
-      ),
+    return SourceBaseButton(
+      label: label,
+      onPressed: onPressed,
+      variant: SourceBaseButtonVariant.secondary,
+      size: height >= 58 ? SBButtonSize.medium : SBButtonSize.small,
     );
   }
 }
@@ -361,13 +298,9 @@ class SocialAuthButton extends StatelessWidget {
           backgroundColor: AppColors.white.withValues(alpha: .94),
           side: const BorderSide(color: AppColors.softLine),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(SBDimensions.buttonRadius),
           ),
-          textStyle: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0,
-          ),
+          textStyle: SBTextStyles.labelMedium,
         ),
         child: FittedBox(
           fit: BoxFit.scaleDown,
@@ -436,7 +369,7 @@ class DividerLabel extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppColors.muted, fontSize: 18),
+            style: SBTextStyles.bodySmall.copyWith(color: AppColors.muted),
           ),
         ),
         const Expanded(child: Divider(color: AppColors.line)),

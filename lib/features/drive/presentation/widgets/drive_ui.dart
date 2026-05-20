@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../../../../core/design_system/components/sourcebase_section_header.dart';
+import '../../../../core/design_system/components/sourcebase_state.dart'
+    as sourcebase_state;
+import '../../../../core/design_system/layout/sourcebase_page_header.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/sourcebase_brand.dart';
 import '../../../../core/widgets/responsive_layout.dart';
@@ -20,15 +24,11 @@ class WorkspacePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maxWidth = ResponsiveLayout.getContentMaxWidth(context);
-    final padding = ResponsiveLayout.getHorizontalPadding(context);
 
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: padding),
-          child: child,
-        ),
+        child: child,
       ),
     );
   }
@@ -48,9 +48,8 @@ class WorkspaceScroll extends StatelessWidget {
     final bottomPadding = isDesktop || isTablet
         ? 48.0
         : SourceBaseBottomNav.scrollEndPadding(context);
-    final topPadding = isDesktop || isTablet
-        ? 18.0
-        : MediaQuery.viewPaddingOf(context).top + 8.0;
+    final topSafe = MediaQuery.viewPaddingOf(context).top;
+    final topPadding = topSafe + (isDesktop || isTablet ? 18.0 : 8.0);
 
     final scroll = ListView(
       physics: const BouncingScrollPhysics(),
@@ -128,7 +127,7 @@ class DriveTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final leading = onBack != null
+    final Widget? leading = onBack != null
         ? IconButton(
             onPressed: onBack,
             tooltip: 'Geri dön',
@@ -137,100 +136,51 @@ class DriveTopBar extends StatelessWidget {
           )
         : showBrand
         ? const SourceBaseBrand(compact: true)
-        : const SizedBox.shrink();
+        : null;
 
-    final actions = showMore
-        ? IconButton(
-            onPressed: onMore,
-            tooltip: 'Diğer işlemler',
-            icon: const Icon(Icons.more_horiz_rounded, size: 30),
+    final actions = <Widget>[
+      if (showMore)
+        IconButton(
+          onPressed: onMore,
+          tooltip: 'Diğer işlemler',
+          icon: const Icon(Icons.more_horiz_rounded, size: 30),
+          color: AppColors.navy,
+        )
+      else ...[
+        if (showSearch)
+          IconButton(
+            onPressed: onSearch,
+            tooltip: 'Ara',
+            icon: const Icon(Icons.search_rounded, size: 30),
             color: AppColors.navy,
-          )
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (showSearch)
-                IconButton(
-                  onPressed: onSearch,
-                  tooltip: 'Ara',
-                  icon: const Icon(Icons.search_rounded, size: 34),
-                  color: AppColors.navy,
-                ),
-              IconButton(
-                onPressed: () => showSourceBaseNotifications(context),
-                tooltip: 'Bildirimler',
-                icon: const Icon(Icons.notifications_none_rounded, size: 32),
-                color: AppColors.navy,
-              ),
-            ],
-          );
-
-    return Semantics(
-      container: true,
-      explicitChildNodes: true,
-      label: 'Üst çubuk',
-      child: Padding(
-        padding: const EdgeInsets.only(top: 6, bottom: 24),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final titleText = Semantics(
-              container: true,
-              header: true,
-              label: title,
-              child: ExcludeSemantics(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-            );
-
-            if (constraints.maxWidth < 430 && showBrand && onBack == null) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(child: leading),
-                      const Spacer(),
-                      actions,
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  titleText,
-                ],
-              );
-            }
-
-            return Row(
-              children: [
-                leading,
-                if (showBrand && onBack == null) ...[
-                  ExcludeSemantics(
-                    child: Container(
-                      width: 1,
-                      height: 24,
-                      margin: const EdgeInsets.symmetric(horizontal: 18),
-                      color: AppColors.line,
-                    ),
-                  ),
-                ],
-                Expanded(child: titleText),
-                actions,
-              ],
-            );
-          },
+          ),
+        IconButton(
+          onPressed: () => showSourceBaseNotifications(context),
+          tooltip: 'Bildirimler',
+          icon: const Icon(Icons.notifications_none_rounded, size: 29),
+          color: AppColors.navy,
         ),
-      ),
+      ],
+    ];
+
+    return SourceBasePageHeader(
+      title: title,
+      subtitle: _sourceBaseHeaderSubtitle(title),
+      leading: leading,
+      actions: actions,
     );
   }
+}
+
+String? _sourceBaseHeaderSubtitle(String title) {
+  return switch (title) {
+    'Drive' => 'Kaynaklarını yükle, işle ve üretime hazır hale getir.',
+    'BaseForce' => 'Kaynaklarından hızlı çalışma çıktıları üret.',
+    'SourceLab' => 'Klinik ve akademik öğrenme çıktıları oluştur.',
+    'Profil' => 'Hesap, kullanım ve paket bilgilerini yönet.',
+    'Paketler' => 'MC bakiyeni ve mevcut paketleri yönet.',
+    _ => null,
+  };
 }
 
 Future<void> showSourceBaseNotifications(BuildContext context) {
@@ -528,47 +478,12 @@ class SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      explicitChildNodes: true,
-      header: true,
-      label: title,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(2, 22, 2, 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: ExcludeSemantics(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-            if (actionLabel != null)
-              TextButton(
-                onPressed: onAction,
-                style: TextButton.styleFrom(foregroundColor: AppColors.blue),
-                child: Row(
-                  children: [
-                    Text(
-                      actionLabel!,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.chevron_right_rounded, size: 24),
-                  ],
-                ),
-              ),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 22, 2, 10),
+      child: SourceBaseSectionHeader(
+        title: title,
+        actionLabel: actionLabel,
+        onAction: onAction,
       ),
     );
   }
@@ -693,27 +608,9 @@ class StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (status) {
-      DriveItemStatus.completed => 'Hazır',
-      DriveItemStatus.processing => 'İşleniyor',
-      DriveItemStatus.uploading => 'Yükleniyor',
-      DriveItemStatus.failed => 'Hata',
-      DriveItemStatus.draft => 'Taslak',
-    };
-    final color = switch (status) {
-      DriveItemStatus.completed => AppColors.green,
-      DriveItemStatus.processing => AppColors.blue,
-      DriveItemStatus.uploading => AppColors.blue,
-      DriveItemStatus.failed => AppColors.red,
-      DriveItemStatus.draft => AppColors.blue,
-    };
-    final bg = switch (status) {
-      DriveItemStatus.completed => AppColors.greenBg,
-      DriveItemStatus.failed => AppColors.redBg,
-      _ => AppColors.selectedBlue,
-    };
+    final info = driveStatusInfo(status);
     return Semantics(
-      label: 'Durum: $label',
+      label: 'Durum: ${info.label}',
       child: ExcludeSemantics(
         child: Container(
           padding: EdgeInsets.symmetric(
@@ -721,9 +618,9 @@ class StatusPill extends StatelessWidget {
             vertical: compact ? 5 : 8,
           ),
           decoration: BoxDecoration(
-            color: bg,
+            color: info.backgroundColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withValues(alpha: .14)),
+            border: Border.all(color: info.color.withValues(alpha: .14)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -731,13 +628,13 @@ class StatusPill extends StatelessWidget {
               if (status == DriveItemStatus.completed)
                 Icon(
                   Icons.check_circle_rounded,
-                  color: color,
+                  color: info.color,
                   size: compact ? 15 : 18,
                 )
               else if (status == DriveItemStatus.failed)
                 Icon(
                   Icons.warning_amber_rounded,
-                  color: color,
+                  color: info.color,
                   size: compact ? 15 : 18,
                 )
               else if (status == DriveItemStatus.processing ||
@@ -747,15 +644,15 @@ class StatusPill extends StatelessWidget {
                   height: compact ? 14 : 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                    valueColor: AlwaysStoppedAnimation<Color>(info.color),
                   ),
                 ),
               if (status != DriveItemStatus.draft)
                 SizedBox(width: compact ? 5 : 8),
               Text(
-                label,
+                info.label,
                 style: TextStyle(
-                  color: color,
+                  color: info.color,
                   fontSize: compact ? 12 : 15,
                   fontWeight: FontWeight.w700,
                 ),
@@ -766,6 +663,119 @@ class StatusPill extends StatelessWidget {
       ),
     );
   }
+}
+
+class DriveStatusInfo {
+  const DriveStatusInfo({
+    required this.label,
+    required this.description,
+    required this.color,
+    required this.backgroundColor,
+    required this.icon,
+  });
+
+  final String label;
+  final String description;
+  final Color color;
+  final Color backgroundColor;
+  final IconData icon;
+}
+
+DriveStatusInfo driveStatusInfo(DriveItemStatus status) {
+  return switch (status) {
+    DriveItemStatus.completed => const DriveStatusInfo(
+      label: 'Hazır',
+      description: 'Bu kaynakla çıktı üretebilirsin.',
+      color: AppColors.green,
+      backgroundColor: AppColors.greenBg,
+      icon: Icons.check_circle_rounded,
+    ),
+    DriveItemStatus.processing => const DriveStatusInfo(
+      label: 'İşleniyor',
+      description: 'Kaynak hazır olduğunda üretim için kullanılabilir.',
+      color: AppColors.blue,
+      backgroundColor: AppColors.selectedBlue,
+      icon: Icons.hourglass_top_rounded,
+    ),
+    DriveItemStatus.uploading => const DriveStatusInfo(
+      label: 'Yükleniyor',
+      description: 'Dosya yükleme tamamlanmadan üretim başlatılamaz.',
+      color: AppColors.blue,
+      backgroundColor: AppColors.selectedBlue,
+      icon: Icons.cloud_upload_outlined,
+    ),
+    DriveItemStatus.failed => const DriveStatusInfo(
+      label: 'Hatalı',
+      description: 'Bu kaynakla çıktı üretilemez.',
+      color: AppColors.red,
+      backgroundColor: AppColors.redBg,
+      icon: Icons.error_outline_rounded,
+    ),
+    DriveItemStatus.draft => const DriveStatusInfo(
+      label: 'Eksik yükleme',
+      description: 'Dosya yükleme tamamlanmamış.',
+      color: AppColors.warning,
+      backgroundColor: AppColors.warningBg,
+      icon: Icons.edit_document,
+    ),
+  };
+}
+
+String driveStatusLabel(DriveItemStatus status) =>
+    driveStatusInfo(status).label;
+
+String driveFriendlyStatusDescription(DriveFile file) {
+  final message = file.statusMessage;
+  if (message != null && message.trim().isNotEmpty) {
+    return driveFriendlyErrorMessage(message);
+  }
+  return driveStatusInfo(file.status).description;
+}
+
+String driveFriendlyErrorMessage(String message) {
+  final text = message.toLowerCase();
+  if (text.contains('no_readable_text') ||
+      text.contains('file_text_empty') ||
+      text.contains('okunabilir metin') ||
+      text.contains('taranmış') ||
+      text.contains('scanned')) {
+    return 'Okunabilir metin bulunamadı. Bu PDF taranmış olabilir. Metin seçilebilen bir PDF yüklemeyi deneyebilirsin.';
+  }
+  if (text.contains('unsupported') ||
+      text.contains('file_type_unsupported') ||
+      text.contains('desteklenmiyor')) {
+    return 'Bu dosya türü desteklenmiyor. PPTX, DOCX veya metin içeren PDF dosyalarıyla devam edebilirsin.';
+  }
+  if (text.contains('limited_support') ||
+      text.contains('.pptx') ||
+      text.contains('.docx') ||
+      text.contains('sınırlı destek')) {
+    return 'Bu dosya türü sınırlı destekleniyor. Dosyayı PPTX veya DOCX olarak kaydedip tekrar yüklemeyi deneyebilirsin.';
+  }
+  if (text.contains('upload') ||
+      text.contains('yüklenemedi') ||
+      text.contains('gcs') ||
+      text.contains('xmlhttprequest')) {
+    return 'Dosya yüklenemedi. Bağlantını kontrol edip tekrar deneyebilirsin.';
+  }
+  if (text.contains('network') ||
+      text.contains('socket') ||
+      text.contains('connection') ||
+      text.contains('bağlantı')) {
+    return 'Bağlantı hatası oluştu. İnternet bağlantını kontrol edip tekrar dene.';
+  }
+  if (text.contains('unauthorized') ||
+      text.contains('401') ||
+      text.contains('oturum')) {
+    return 'Oturum süren dolmuş olabilir. Lütfen tekrar giriş yap.';
+  }
+  return 'İşlem tamamlanamadı. Dosyayı kontrol edip tekrar deneyebilirsin.';
+}
+
+bool driveFileUsableForGeneration(DriveFile file) {
+  if (file.status != DriveItemStatus.completed) return false;
+  final size = file.sizeLabel.trim().toLowerCase();
+  return size.isNotEmpty && size != '-' && !size.startsWith('0 ');
 }
 
 class FileKindBadge extends StatelessWidget {
@@ -1046,44 +1056,10 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: AppColors.selectedBlue,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Icon(icon, size: 30, color: AppColors.blue),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.navy,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subMessage,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 14,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
+    return sourcebase_state.SourceBaseEmptyState(
+      icon: icon,
+      title: message,
+      message: subMessage,
     );
   }
 }

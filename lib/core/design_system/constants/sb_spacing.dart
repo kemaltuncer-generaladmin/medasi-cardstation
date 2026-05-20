@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 
 /// SourceBase Spacing System
-/// 
+///
 /// Based on 8px grid system for consistent spacing throughout the app.
 /// All spacing values are multiples of 8px (base unit).
 class SBSpacing {
   const SBSpacing._();
+
+  static const double mobilePagePadding = 16;
+  static const double tabletPagePadding = 24;
+  static const double desktopPagePadding = 32;
+  static const double sectionGap = 24;
+  static const double cardGap = 16;
 
   /// Extra small spacing: 4px (0.5x base)
   /// Use for: Tight icon-text gaps, minimal separators
@@ -37,12 +43,17 @@ class SBSpacing {
 
   // Convenience methods for EdgeInsets
   static EdgeInsets all(double value) => EdgeInsets.all(value);
-  static EdgeInsets horizontal(double value) => EdgeInsets.symmetric(horizontal: value);
-  static EdgeInsets vertical(double value) => EdgeInsets.symmetric(vertical: value);
-  
+  static EdgeInsets horizontal(double value) =>
+      EdgeInsets.symmetric(horizontal: value);
+  static EdgeInsets vertical(double value) =>
+      EdgeInsets.symmetric(vertical: value);
+
   static const EdgeInsets allXs = EdgeInsets.all(xs);
   static const EdgeInsets allSm = EdgeInsets.all(sm);
   static const EdgeInsets allMd = EdgeInsets.all(md);
   static const EdgeInsets allLg = EdgeInsets.all(lg);
   static const EdgeInsets allXl = EdgeInsets.all(xl);
+
+  static const EdgeInsets cardPadding = EdgeInsets.all(20);
+  static const EdgeInsets compactCardPadding = EdgeInsets.all(16);
 }

@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/design_system/components/sourcebase_button.dart';
+import '../../../../core/design_system/components/sourcebase_card.dart';
+import '../../../../core/design_system/components/sourcebase_state.dart';
+import '../../../../core/design_system/constants/sb_dimensions.dart';
+import '../../../../core/design_system/layout/sourcebase_page_header.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/sourcebase_brand.dart';
 import '../../../auth/data/sourcebase_auth_backend.dart';
@@ -78,8 +83,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Çıkış Yap'),
-        content: const Text('Hesabından çıkış yapmak istediğine emin misin?'),
+        title: const Text('Oturumu kapat'),
+        content: const Text(
+          'Oturumunu kapatmak istediğine emin misin? Tekrar devam etmek için giriş yapman gerekir.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -88,7 +95,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.red),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Çıkış Yap'),
+            child: const Text('Oturumu kapat'),
           ),
         ],
       ),
@@ -105,7 +112,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Çıkış yapılırken bir sorun oluştu.'),
+            content: Text('Oturum kapatılamadı. Lütfen tekrar dene.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -120,29 +127,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return WorkspaceScroll(
       onRefresh: _refreshProfile,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Row(
-            children: [
-              const SourceBaseBrand(compact: true),
-              const _TopDivider(),
-              const Expanded(
-                child: Text(
-                  'Profil',
-                  style: TextStyle(
-                    color: AppColors.blue,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              SBIconButton(
-                icon: Icons.search_rounded,
-                onPressed: widget.onSearch,
-                tooltip: 'Ara',
-              ),
-            ],
-          ),
+        SourceBasePageHeader(
+          title: 'Profil',
+          subtitle:
+              'Hesap bilgilerini ve kullanım durumunu buradan takip edebilirsin.',
+          leading: const SourceBaseBrand(compact: true),
+          actions: [
+            SBIconButton(
+              icon: Icons.search_rounded,
+              onPressed: widget.onSearch,
+              tooltip: 'Ara',
+            ),
+          ],
         ),
         FutureBuilder<_ProfileSnapshot>(
           future: _profileFuture,
@@ -189,7 +185,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: SBPrimaryButton(
-                          label: _signingOut ? 'Çıkış...' : 'Çıkış Yap',
+                          label: _signingOut
+                              ? 'Kapatılıyor...'
+                              : 'Oturumu kapat',
                           icon: Icons.logout_rounded,
                           onPressed: _signingOut
                               ? null
@@ -250,7 +248,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onTap: () => _showSettingsInfo(
                         title: 'Güvenlik ve Şifre',
                         message:
-                            'Şifre yenileme işlemi giriş ekranındaki şifremi unuttum akışından yapılır. Aktif oturumu sonlandırmak için bu ekrandaki Çıkış Yap butonunu kullanabilirsin.',
+                            'Şifre yenileme işlemi giriş ekranındaki şifremi unuttum akışından yapılır. Aktif oturumu sonlandırmak için bu ekrandaki Oturumu kapat butonunu kullanabilirsin.',
                         icon: Icons.security_rounded,
                       ),
                     ),
@@ -316,7 +314,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 32),
                 SBPrimaryButton(
-                  label: _signingOut ? 'Çıkış Yapılıyor...' : 'Çıkış Yap',
+                  label: _signingOut
+                      ? 'Oturum kapatılıyor...'
+                      : 'Oturumu kapat',
                   icon: Icons.logout_rounded,
                   onPressed: _signingOut ? null : () => _signOut(context),
                   loading: _signingOut,
@@ -545,28 +545,28 @@ String _friendlyPurchaseError(String message) {
   if (normalized.contains('unknown_action') ||
       normalized.contains('sourcebase işlemi bulunamadı') ||
       normalized.contains('purchase_medasicoin')) {
-    return 'Ödeme linki şu anda hazırlanamadı. Kartından ücret alınmadı; lütfen daha sonra tekrar dene.';
+    return 'Paket bilgileri doğrulanamadı. Lütfen tekrar dene.';
   }
   if (normalized.contains('400') ||
       normalized.contains('bad request') ||
       normalized.contains('invalid')) {
-    return 'Ödeme linki oluşturulamadı. Kartından ücret alınmadı; lütfen daha sonra tekrar dene.';
+    return 'Paket bilgileri doğrulanamadı. Lütfen tekrar dene.';
   }
   if (normalized.contains('cancel')) {
-    return 'Satın alma iptal edildi.';
+    return 'Ödeme işlemi iptal edildi.';
   }
   if (normalized.contains('auth') ||
       normalized.contains('session') ||
       normalized.contains('oturum') ||
       normalized.contains('unauthorized')) {
-    return 'Satın alma için yeniden giriş yapman gerekiyor.';
+    return 'Oturum süren dolmuş olabilir. Devam etmek için tekrar giriş yap.';
   }
   if (normalized.contains('network') ||
       normalized.contains('socket') ||
       normalized.contains('xmlhttprequest')) {
-    return 'Ödeme servisine ulaşılamadı. Bağlantını kontrol edip tekrar dene.';
+    return 'Paketler yüklenemedi. Bağlantını kontrol edip tekrar deneyebilirsin.';
   }
-  return 'Ödeme başlatılamadı. Kartından ücret alınmadı; lütfen tekrar dene.';
+  return 'Ödeme başlatılamadı. Paket bilgileri doğrulanamadı. Lütfen tekrar dene.';
 }
 
 class _ProfileHeader extends StatelessWidget {
@@ -576,8 +576,8 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassPanel(
-      padding: const EdgeInsets.all(24),
+    return SourceBaseCard(
+      padding: const EdgeInsets.all(SBDimensions.cardPadding),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 430;
@@ -905,11 +905,12 @@ class _WalletPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      button: true,
-      label:
-          'MedAsiCoin cüzdanı, ${balance.label}, ${balance.rightsLabel}. Mağazaya git.',
+      button: !loadFailed,
+      label: loadFailed
+          ? 'MC bakiyesi yüklenemedi.'
+          : 'MC cüzdanı, ${balance.label}, ${balance.rightsLabel}. Paketlere git.',
       child: InkWell(
-        onTap: onOpenStore,
+        onTap: loadFailed ? null : onOpenStore,
         borderRadius: BorderRadius.circular(16),
         child: GlassPanel(
           padding: const EdgeInsets.all(20),
@@ -935,7 +936,7 @@ class _WalletPanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'MedAsiCoin',
+                      'Mevcut MC',
                       style: TextStyle(
                         color: AppColors.muted,
                         fontSize: 14,
@@ -944,18 +945,20 @@ class _WalletPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      balance.label,
+                      loadFailed ? 'Yüklenemedi' : balance.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.navy,
+                      style: TextStyle(
+                        color: loadFailed ? AppColors.red : AppColors.navy,
                         fontSize: 30,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      balance.rightsLabel,
+                      loadFailed
+                          ? 'Bakiye bilgisi şu anda alınamadı.'
+                          : balance.rightsLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -964,10 +967,12 @@ class _WalletPanel extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (loadFailed) ...[
+                    if (!loadFailed &&
+                        balance.amount <= 0 &&
+                        balance.rights <= 0) ...[
                       const SizedBox(height: 6),
                       const Text(
-                        'Bakiye yüklenemedi, güvenli yedek değer gösteriliyor.',
+                        'Yeni çıktı oluşturmak için paket satın alman gerekebilir.',
                         style: TextStyle(
                           color: AppColors.muted,
                           fontSize: 12,
@@ -1014,9 +1019,9 @@ class _MedasiWalletBalance {
     final client = SourceBaseAuthBackend.client;
     final userId = SourceBaseAuthBackend.currentUser?.id;
     if (client == null || userId == null) {
-      return const _MedasiWalletBalance(0);
+      throw StateError('Oturum gerekli.');
     }
-    var profileBalance = const _MedasiWalletBalance(0);
+    _MedasiWalletBalance? profileBalance;
     try {
       final row = await client
           .from('profiles')
@@ -1029,7 +1034,7 @@ class _MedasiWalletBalance {
         );
       }
     } catch (_) {
-      profileBalance = const _MedasiWalletBalance(0);
+      profileBalance = null;
     }
 
     try {
@@ -1042,9 +1047,13 @@ class _MedasiWalletBalance {
         (total, row) =>
             total + _safeInt(Map<String, dynamic>.from(row)['amount_units']),
       );
-      return _MedasiWalletBalance(units / 100, rights: profileBalance.rights);
+      return _MedasiWalletBalance(
+        units / 100,
+        rights: profileBalance?.rights ?? 0,
+      );
     } catch (_) {
-      return profileBalance;
+      if (profileBalance != null) return profileBalance;
+      throw StateError('Bakiye yüklenemedi.');
     }
   }
 
@@ -1120,11 +1129,21 @@ class _MedasiCoinStoreScreenState extends State<MedasiCoinStoreScreen> {
     return WorkspaceScroll(
       onRefresh: _refreshStoreData,
       children: [
-        DriveTopBar(
-          title: 'MedAsiCoin Mağazası',
-          onSearch: widget.onSearch,
-          onBack: widget.onBack,
-          showBrand: false,
+        SourceBasePageHeader(
+          title: 'Paketler',
+          subtitle: 'MC bakiyeni ve mevcut paketleri yönet.',
+          leading: SBIconButton(
+            icon: Icons.arrow_back_rounded,
+            onPressed: widget.onBack,
+            tooltip: 'Geri dön',
+          ),
+          actions: [
+            SBIconButton(
+              icon: Icons.search_rounded,
+              onPressed: widget.onSearch,
+              tooltip: 'Ara',
+            ),
+          ],
         ),
         GlassPanel(
           padding: const EdgeInsets.all(22),
@@ -1146,7 +1165,7 @@ class _MedasiCoinStoreScreenState extends State<MedasiCoinStoreScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'MedAsiCoin Paketleri',
+                'MC Paketleri',
                 style: TextStyle(
                   color: AppColors.navy,
                   fontSize: 26,
@@ -1182,8 +1201,8 @@ class _MedasiCoinStoreScreenState extends State<MedasiCoinStoreScreen> {
             if (snapshot.hasError) {
               return _StatePanel(
                 icon: Icons.error_outline_rounded,
-                title: 'Mağaza yüklenemedi',
-                message: 'Paketler şu anda alınamadı. Lütfen tekrar dene.',
+                title: 'Paketler yüklenemedi',
+                message: 'Bağlantını kontrol edip tekrar deneyebilirsin.',
                 actionLabel: 'Tekrar Dene',
                 onAction: () {
                   setState(
@@ -1197,21 +1216,36 @@ class _MedasiCoinStoreScreenState extends State<MedasiCoinStoreScreen> {
             if (packages.isEmpty) {
               return const _StatePanel(
                 icon: Icons.inventory_2_outlined,
-                title: 'Aktif paket yok',
+                title: 'Paket bulunamadı',
                 message:
-                    'Satın alınabilir paket bulunamadı. Paketler aktif edildiğinde burada görünecek.',
+                    'Satın alınabilir gerçek paket bulunamadı. Paketler aktif edildiğinde burada görünecek.',
               );
             }
-            return Column(
-              children: [
-                for (final item in packages) ...[
-                  _StorePackageTile(
-                    package: item,
-                    onPurchaseStateChanged: _refreshWallet,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ],
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 980
+                    ? 3
+                    : constraints.maxWidth >= 650
+                    ? 2
+                    : 1;
+                final gap = columns == 1 ? 0.0 : 12.0;
+                final itemWidth =
+                    (constraints.maxWidth - gap * (columns - 1)) / columns;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: 12,
+                  children: [
+                    for (final item in packages)
+                      SizedBox(
+                        width: itemWidth,
+                        child: _StorePackageTile(
+                          package: item,
+                          onPurchaseStateChanged: _refreshWallet,
+                        ),
+                      ),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -1235,18 +1269,22 @@ class _StorePackageTile extends StatefulWidget {
 
 final bool _storePaymentsEnabled = true;
 
+enum _PurchaseUiState { pending, success, failed, cancelled, unknown }
+
 class _StorePackageTileState extends State<_StorePackageTile> {
   bool _buying = false;
   String? _buyError;
   String? _buyInfo;
   String? _checkoutUrl;
+  _PurchaseUiState? _purchaseState;
 
   Future<void> _purchase() async {
     if (_buying) return;
     if (!widget.package.canPurchase) {
       setState(() {
-        _buyError = 'Bu paket için fiyat veya ürün bilgisi eksik.';
+        _buyError = 'Paket bilgileri doğrulanamadı. Lütfen tekrar dene.';
         _buyInfo = null;
+        _purchaseState = _PurchaseUiState.failed;
       });
       return;
     }
@@ -1255,11 +1293,16 @@ class _StorePackageTileState extends State<_StorePackageTile> {
       _buyError = null;
       _buyInfo = null;
       _checkoutUrl = null;
+      _purchaseState = _PurchaseUiState.pending;
     });
     try {
       final client = SourceBaseAuthBackend.client;
       if (client == null) {
-        setState(() => _buyError = 'Satın alma için giriş yapman gerekiyor.');
+        setState(() {
+          _buyError =
+              'Oturum süren dolmuş olabilir. Devam etmek için tekrar giriş yap.';
+          _purchaseState = _PurchaseUiState.failed;
+        });
         return;
       }
       final result = await client.functions.invoke(
@@ -1276,7 +1319,10 @@ class _StorePackageTileState extends State<_StorePackageTile> {
       final raw = result.data;
       final json = raw is Map ? Map<String, dynamic>.from(raw) : null;
       if (json == null) {
-        setState(() => _buyError = 'Ödeme cevabı okunamadı.');
+        setState(() {
+          _buyError = 'Ödeme durumu doğrulanamadı.';
+          _purchaseState = _PurchaseUiState.unknown;
+        });
         return;
       }
       final data = json['data'];
@@ -1289,39 +1335,53 @@ class _StorePackageTileState extends State<_StorePackageTile> {
       ).toLowerCase();
       if (json['ok'] == true && _isPaidStatus(status)) {
         if (!mounted) return;
-        setState(
-          () => _buyInfo =
-              'Ödeme backend tarafından onaylandı. Bakiye yenileniyor.',
-        );
+        setState(() {
+          _buyInfo = 'Paket hesabına tanımlandı. Bakiye yenileniyor.';
+          _purchaseState = _PurchaseUiState.success;
+        });
         widget.onPurchaseStateChanged();
       } else if (json['ok'] == true && _isCancelledStatus(status)) {
         if (!mounted) return;
-        setState(() => _buyError = 'Satın alma iptal edildi.');
+        setState(() {
+          _buyError = 'Ödeme işlemi iptal edildi.';
+          _purchaseState = _PurchaseUiState.cancelled;
+        });
       } else if (json['ok'] == true && _isFailedStatus(status)) {
         if (!mounted) return;
-        setState(() => _buyError = 'Ödeme tamamlanamadı. Lütfen tekrar dene.');
+        setState(() {
+          _buyError =
+              'Satın alma tamamlanamadı. Ödeme sağlayıcısından yanıt alınamadı.';
+          _purchaseState = _PurchaseUiState.failed;
+        });
       } else if (json['ok'] == true && checkoutUrl.isNotEmpty) {
         if (!mounted) return;
-        setState(
-          () => _buyInfo =
-              'Ödeme bağlantısı hazırlandı. Linki kopyalayıp güvenli ödeme sayfasında işlemi tamamlayabilirsin.',
-        );
+        setState(() {
+          _buyInfo =
+              'Ödeme sonucu bekleniyor. Linki kopyalayıp güvenli ödeme sayfasında işlemi tamamlayabilirsin.';
+          _purchaseState = _PurchaseUiState.pending;
+        });
         setState(() => _checkoutUrl = checkoutUrl);
       } else if (json['ok'] == true) {
         if (!mounted) return;
-        setState(
-          () => _buyError =
-              'Ödeme linki henüz hazır değil. Kartından ücret alınmadı; lütfen daha sonra tekrar dene.',
-        );
+        setState(() {
+          _buyError = 'Ödeme durumu doğrulanamadı.';
+          _purchaseState = _PurchaseUiState.unknown;
+        });
       } else {
         final error = json['error'];
         final message = error is Map ? _safeText(error['message']) : '';
         final code = error is Map ? _safeText(error['code']) : '';
-        setState(() => _buyError = _friendlyPurchaseError('$code $message'));
+        setState(() {
+          _buyError = _friendlyPurchaseError('$code $message');
+          _purchaseState = _PurchaseUiState.failed;
+        });
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _buyError = _friendlyPurchaseError(error.toString()));
+        setState(() {
+          _buyError = _friendlyPurchaseError(error.toString());
+          _purchaseState = _PurchaseUiState.failed;
+        });
       }
     } finally {
       if (mounted) setState(() => _buying = false);
@@ -1387,7 +1447,7 @@ class _StorePackageTileState extends State<_StorePackageTile> {
             ),
           );
           final button = SizedBox(
-            width: compact ? double.infinity : 124,
+            width: compact ? double.infinity : 138,
             height: 42,
             child: FilledButton(
               onPressed:
@@ -1412,7 +1472,7 @@ class _StorePackageTileState extends State<_StorePackageTile> {
                   : const FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        'Ödeme Linki Al',
+                        'Ödeme başlat',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
@@ -1456,7 +1516,7 @@ class _StorePackageTileState extends State<_StorePackageTile> {
               if (!widget.package.canPurchase) ...[
                 const SizedBox(height: 8),
                 const Text(
-                  'Bu paket satışa hazır değil.',
+                  'Paket bilgileri doğrulanamadığı için satın alma kapalı.',
                   style: TextStyle(
                     color: AppColors.muted,
                     fontSize: 13,
@@ -1476,37 +1536,110 @@ class _StorePackageTileState extends State<_StorePackageTile> {
                   ),
                 ),
               ],
-              if (_buyInfo != null) ...[
+              if (_buying) ...[
                 const SizedBox(height: 8),
-                Text(
-                  _buyInfo!,
-                  style: const TextStyle(
-                    color: AppColors.blue,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
-                  ),
+                const _PaymentStateNotice(
+                  state: _PurchaseUiState.pending,
+                  message: 'Ödeme hazırlanıyor.',
                 ),
+              ],
+              if (!_buying && _buyInfo != null && _purchaseState != null) ...[
+                const SizedBox(height: 8),
+                _PaymentStateNotice(state: _purchaseState!, message: _buyInfo!),
               ],
               if (_checkoutUrl != null) ...[
                 const SizedBox(height: 10),
                 _CheckoutLinkActions(url: _checkoutUrl!),
               ],
-              if (_buyError != null) ...[
+              if (!_buying && _buyError != null && _purchaseState != null) ...[
                 const SizedBox(height: 8),
-                Text(
-                  _buyError!,
-                  style: const TextStyle(
-                    color: AppColors.red,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
-                  ),
+                _PaymentStateNotice(
+                  state: _purchaseState!,
+                  message: _buyError!,
                 ),
               ],
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _PaymentStateNotice extends StatelessWidget {
+  const _PaymentStateNotice({required this.state, required this.message});
+
+  final _PurchaseUiState state;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, title, color) = switch (state) {
+      _PurchaseUiState.pending => (
+        Icons.hourglass_top_rounded,
+        'Ödeme sonucu bekleniyor',
+        AppColors.blue,
+      ),
+      _PurchaseUiState.success => (
+        Icons.check_circle_outline_rounded,
+        'Paket hesabına tanımlandı',
+        AppColors.green,
+      ),
+      _PurchaseUiState.failed => (
+        Icons.error_outline_rounded,
+        'Ödeme tamamlanamadı',
+        AppColors.red,
+      ),
+      _PurchaseUiState.cancelled => (
+        Icons.cancel_outlined,
+        'Ödeme işlemi iptal edildi',
+        AppColors.muted,
+      ),
+      _PurchaseUiState.unknown => (
+        Icons.help_outline_rounded,
+        'Ödeme durumu doğrulanamadı',
+        AppColors.orange,
+      ),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: .18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1714,7 +1847,12 @@ class _MedasiCoinPackage {
         .map(_fromBackendRow)
         .where((item) => item.code.isNotEmpty && item.hasPrice)
         .toList();
-    return _mergeWithVerifiedCatalog(backendPackages);
+    backendPackages.sort((a, b) {
+      final order = a.sortOrder.compareTo(b.sortOrder);
+      if (order != 0) return order;
+      return (a.priceCents ?? 0).compareTo(b.priceCents ?? 0);
+    });
+    return backendPackages;
   }
 
   static Future<List<Map<String, dynamic>>> _loadBackendRows(
@@ -1777,7 +1915,7 @@ class _MedasiCoinPackage {
       description: _firstText(
         [data['description'], data['subtitle'], metadata['description']],
         fallback: coin > 0
-            ? '$coin MedAsiCoin hesabına onaylı ödeme sonrası eklenir.'
+            ? '$coin MC onaylı ödeme sonrası hesabına eklenir.'
             : 'Üyelik hakkı onaylı ödeme sonrası hesaba eklenir.',
       ),
       currency: _safeText(
@@ -1788,74 +1926,7 @@ class _MedasiCoinPackage {
       sortOrder: _safeInt(data['sort_order'] ?? metadata['sort_order']),
     );
   }
-
-  static List<_MedasiCoinPackage> _mergeWithVerifiedCatalog(
-    List<_MedasiCoinPackage> backendPackages,
-  ) {
-    final merged = <_MedasiCoinPackage>[
-      ..._verifiedCatalog,
-      for (final item in backendPackages)
-        if (!_verifiedCatalog.any((verified) => verified.code == item.code))
-          item,
-    ];
-    merged.sort((a, b) {
-      final order = a.sortOrder.compareTo(b.sortOrder);
-      if (order != 0) return order;
-      return a.priceCents?.compareTo(b.priceCents ?? 0) ?? 0;
-    });
-    return merged;
-  }
 }
-
-const List<_MedasiCoinPackage> _verifiedCatalog = [
-  _MedasiCoinPackage(
-    code: 'mc_10',
-    coin: 10,
-    priceCents: 4000,
-    title: '10 MC Paketi',
-    description: '10 MedAsiCoin onaylı ödeme sonrası cüzdanına eklenir.',
-    currency: 'TL',
-    sortOrder: 10,
-  ),
-  _MedasiCoinPackage(
-    code: 'mc_20',
-    coin: 20,
-    priceCents: 6500,
-    title: '20 MC Paketi',
-    description: '20 MedAsiCoin onaylı ödeme sonrası cüzdanına eklenir.',
-    currency: 'TL',
-    sortOrder: 20,
-  ),
-  _MedasiCoinPackage(
-    code: 'mc_50',
-    coin: 50,
-    priceCents: 18000,
-    title: '50 MC Paketi',
-    description: '50 MedAsiCoin onaylı ödeme sonrası cüzdanına eklenir.',
-    currency: 'TL',
-    sortOrder: 30,
-  ),
-  _MedasiCoinPackage(
-    code: 'weekly',
-    coin: 0,
-    priceCents: 10000,
-    title: 'Weekly',
-    description: 'Haftalık SourceBase erişimi onaylı ödeme sonrası başlar.',
-    currency: 'TRY',
-    kind: _StorePackageKind.subscription,
-    sortOrder: 40,
-  ),
-  _MedasiCoinPackage(
-    code: 'monthly',
-    coin: 0,
-    priceCents: 50000,
-    title: 'Monthly',
-    description: 'Aylık SourceBase erişimi onaylı ödeme sonrası başlar.',
-    currency: 'TRY',
-    kind: _StorePackageKind.subscription,
-    sortOrder: 50,
-  ),
-];
 
 class _StatePanel extends StatelessWidget {
   const _StatePanel({
@@ -1876,49 +1947,19 @@ class _StatePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassPanel(
-      padding: const EdgeInsets.all(22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          loading
-              ? const SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(strokeWidth: 2.5),
-                )
-              : Icon(icon, color: AppColors.blue, size: 30),
-          const SizedBox(height: 14),
-          Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.navy,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            message,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 14,
-              height: 1.35,
-            ),
-          ),
-          if (actionLabel != null && onAction != null) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 42,
-              child: FilledButton(
-                onPressed: onAction,
-                child: Text(actionLabel!),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
+    if (loading) {
+      return SourceBaseLoadingState(icon: icon, title: title, message: message);
+    }
+    if (actionLabel != null && onAction != null) {
+      return SourceBaseErrorState(
+        icon: icon,
+        title: title,
+        message: message,
+        actionLabel: actionLabel,
+        onAction: onAction,
+      );
+    }
+    return SourceBaseEmptyState(icon: icon, title: title, message: message);
   }
 }
 
@@ -1939,7 +1980,7 @@ class _InlineActionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassPanel(
+    return SourceBaseCard(
       padding: const EdgeInsets.all(18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1969,12 +2010,12 @@ class _InlineActionPanel extends StatelessWidget {
                 ),
                 if (actionLabel != null && onAction != null) ...[
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 38,
-                    child: FilledButton(
-                      onPressed: onAction,
-                      child: Text(actionLabel!),
-                    ),
+                  SourceBaseButton(
+                    label: actionLabel!,
+                    onPressed: onAction,
+                    variant: SourceBaseButtonVariant.secondary,
+                    size: SBButtonSize.small,
+                    fullWidth: false,
                   ),
                 ],
               ],
@@ -2028,7 +2069,7 @@ class _SettingsGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassPanel(
+    return SourceBaseCard(
       padding: EdgeInsets.zero,
       child: Column(
         children: [
@@ -2116,19 +2157,6 @@ class _SettingsItem extends StatelessWidget {
             : null,
         onTap: onTap,
       ),
-    );
-  }
-}
-
-class _TopDivider extends StatelessWidget {
-  const _TopDivider();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 24,
-      margin: const EdgeInsets.symmetric(horizontal: 18),
-      color: const Color(0xFFE2E8F0),
     );
   }
 }

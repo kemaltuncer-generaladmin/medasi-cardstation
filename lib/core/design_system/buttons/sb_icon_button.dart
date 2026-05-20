@@ -5,7 +5,7 @@ import '../constants/sb_dimensions.dart';
 enum SBIconButtonSize { compact, medium, large }
 
 /// SourceBase Icon Button
-/// 
+///
 /// Circular icon button for toolbar and navigation. Features:
 /// - Circular shape with shadow
 /// - Mandatory tooltip (AGENTS.md §30)
@@ -48,7 +48,7 @@ class SBIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDisabled = onPressed == null;
-    
+
     return Semantics(
       button: true,
       enabled: !isDisabled,

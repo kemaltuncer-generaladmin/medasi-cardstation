@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/constants/sb_dimensions.dart';
+import '../design_system/constants/sb_spacing.dart';
+
+enum SourceBaseBreakpoint { mobile, tablet, desktop }
+
 /// SourceBase Responsive Layout System
 ///
 /// Provides consistent layout behavior across mobile, tablet, and desktop.
 /// Breakpoints:
-/// - Mobile: < 600px
-/// - Tablet: 600px - 1024px
-/// - Desktop: > 1024px
+/// - Mobile: 0 - 599px
+/// - Tablet: 600px - 1023px
+/// - Desktop: 1024px and wider
 class ResponsiveLayout extends StatelessWidget {
   const ResponsiveLayout({
     required this.mobile,
@@ -19,39 +24,100 @@ class ResponsiveLayout extends StatelessWidget {
   final WidgetBuilder? tablet;
   final WidgetBuilder? desktop;
 
+  static const double mobileMax = 599;
+  static const double tabletMin = 600;
+  static const double desktopMin = 1024;
+
+  static SourceBaseBreakpoint breakpointOf(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width >= desktopMin) return SourceBaseBreakpoint.desktop;
+    if (width >= tabletMin) return SourceBaseBreakpoint.tablet;
+    return SourceBaseBreakpoint.mobile;
+  }
+
   static bool isMobile(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < 600;
+      breakpointOf(context) == SourceBaseBreakpoint.mobile;
 
   static bool isTablet(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    return width >= 600 && width < 1024;
+    return breakpointOf(context) == SourceBaseBreakpoint.tablet;
   }
 
   static bool isDesktop(BuildContext context) =>
-      MediaQuery.sizeOf(context).width >= 1024;
+      breakpointOf(context) == SourceBaseBreakpoint.desktop;
 
   static double getContentMaxWidth(BuildContext context) {
-    if (isDesktop(context)) return 960;
-    if (isTablet(context)) return 720;
-    return 520;
+    return switch (breakpointOf(context)) {
+      SourceBaseBreakpoint.desktop => SBDimensions.desktopMaxContentWidth,
+      SourceBaseBreakpoint.tablet => SBDimensions.tabletMaxContentWidth,
+      SourceBaseBreakpoint.mobile => double.infinity,
+    };
   }
 
   static double getHorizontalPadding(BuildContext context) {
-    if (isDesktop(context)) return 32;
-    if (isTablet(context)) return 24;
-    return MediaQuery.sizeOf(context).width < 390 ? 14 : 16;
+    return switch (breakpointOf(context)) {
+      SourceBaseBreakpoint.desktop => SBSpacing.desktopPagePadding,
+      SourceBaseBreakpoint.tablet => SBSpacing.tabletPagePadding,
+      SourceBaseBreakpoint.mobile => SBSpacing.mobilePagePadding,
+    };
+  }
+
+  static EdgeInsets safePagePadding(
+    BuildContext context, {
+    bool includeTop = true,
+    bool includeBottom = true,
+    double topExtra = 0,
+    double bottomExtra = 0,
+  }) {
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final horizontal = getHorizontalPadding(context);
+    return EdgeInsets.fromLTRB(
+      horizontal,
+      (includeTop ? viewPadding.top : 0) + topExtra,
+      horizontal,
+      (includeBottom ? viewPadding.bottom : 0) + bottomExtra,
+    );
+  }
+
+  static T value<T>(
+    BuildContext context, {
+    required T mobile,
+    T? tablet,
+    T? desktop,
+  }) {
+    return switch (breakpointOf(context)) {
+      SourceBaseBreakpoint.desktop => desktop ?? tablet ?? mobile,
+      SourceBaseBreakpoint.tablet => tablet ?? mobile,
+      SourceBaseBreakpoint.mobile => mobile,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
 
-    if (width >= 1024 && desktop != null) {
+    if (width >= desktopMin && desktop != null) {
       return desktop!(context);
-    } else if (width >= 600 && tablet != null) {
+    } else if (width >= tabletMin && tablet != null) {
       return tablet!(context);
     }
     return mobile(context);
+  }
+}
+
+class ResponsiveValue<T> {
+  const ResponsiveValue({required this.mobile, this.tablet, this.desktop});
+
+  final T mobile;
+  final T? tablet;
+  final T? desktop;
+
+  T resolve(BuildContext context) {
+    return ResponsiveLayout.value(
+      context,
+      mobile: mobile,
+      tablet: tablet,
+      desktop: desktop,
+    );
   }
 }
 
@@ -65,13 +131,15 @@ class AdaptiveContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maxWidth = ResponsiveLayout.getContentMaxWidth(context);
-    final defaultPadding = ResponsiveLayout.getHorizontalPadding(context);
-
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Padding(
-          padding: padding ?? EdgeInsets.symmetric(horizontal: defaultPadding),
+          padding:
+              padding ??
+              EdgeInsets.symmetric(
+                horizontal: ResponsiveLayout.getHorizontalPadding(context),
+              ),
           child: child,
         ),
       ),

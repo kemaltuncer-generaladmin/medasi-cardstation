@@ -29,7 +29,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const AppShellForTest(child: ProfileSetupScreen()));
 
-    expect(find.text('Bilgilerini\ntamamla'), findsOneWidget);
+    expect(find.text('Profilini tamamla'), findsOneWidget);
     expect(find.text('Fakülte / Üniversite'), findsOneWidget);
     expect(find.text('Devam Et'), findsOneWidget);
   });

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/design_system/layout/sourcebase_page_header.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/sourcebase_brand.dart';
 import '../../../drive/data/drive_models.dart';
@@ -154,21 +155,12 @@ class _CentralAiScreenState extends State<CentralAiScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
-              child: Row(
-                children: [
-                  const SourceBaseBrand(compact: true),
-                  const _TopDivider(),
-                  const Expanded(
-                    child: Text(
-                      'Merkezi AI',
-                      style: TextStyle(
-                        color: AppColors.blue,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
+              padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+              child: SourceBasePageHeader(
+                title: 'Merkezi AI',
+                subtitle: 'Drive kaynaklarınla güvenli çalışma sohbeti başlat.',
+                leading: const SourceBaseBrand(compact: true),
+                actions: [
                   _RoundIconButton(
                     icon: Icons.search_rounded,
                     onTap: widget.onSearch,
@@ -680,19 +672,6 @@ class _SendButton extends StatelessWidget {
   }
 }
 
-class _TopDivider extends StatelessWidget {
-  const _TopDivider();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 24,
-      margin: const EdgeInsets.symmetric(horizontal: 18),
-      color: const Color(0xFFE2E8F0),
-    );
-  }
-}
-
 class _RoundIconButton extends StatelessWidget {
   const _RoundIconButton({required this.icon, required this.onTap});
   final IconData icon;
@@ -722,14 +701,21 @@ String _friendlyAiError(Object error) {
       .replaceFirst('Exception: ', '')
       .trim();
   if (text.contains('SourceBase Supabase client is not configured')) {
-    return 'Oturum bağlantısı hazır değil. Lütfen tekrar giriş yapın.';
+    return 'Oturum süren dolmuş olabilir. Devam etmek için tekrar giriş yap.';
+  }
+  final lowerText = text.toLowerCase();
+  if (lowerText.contains('unauthorized') || lowerText.contains('401')) {
+    return 'Oturum süren dolmuş olabilir. Devam etmek için tekrar giriş yap.';
+  }
+  if (lowerText.contains('network') ||
+      lowerText.contains('socket') ||
+      lowerText.contains('failed to fetch')) {
+    return 'Bağlantı kurulamadı. İnternet bağlantını kontrol edip tekrar dene.';
   }
   if (_isRawAiProviderError(text)) {
-    return 'Merkezi AI şu anda yanıt üretemedi. Kaynakların güvende; harcanan MC varsa iade edilir.';
+    return 'Yanıt oluşturulamadı. Kaynağı kontrol edip tekrar deneyebilirsin.';
   }
-  return text.isEmpty
-      ? 'Merkezi AI isteği tamamlanamadı. Lütfen tekrar deneyin.'
-      : text;
+  return 'Yanıt oluşturulamadı. Kaynağı veya mesajı kontrol edip tekrar deneyebilirsin.';
 }
 
 String? _contextFileDisabledReason(DriveFile file) {

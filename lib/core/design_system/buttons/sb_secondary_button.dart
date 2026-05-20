@@ -5,7 +5,7 @@ import '../constants/sb_spacing.dart';
 import 'sb_primary_button.dart';
 
 /// SourceBase Secondary Button
-/// 
+///
 /// Outline button for secondary actions. Features:
 /// - Border with transparent background
 /// - Optional icon
@@ -59,7 +59,7 @@ class SBSecondaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDisabled = onPressed == null || loading;
-    
+
     return Semantics(
       button: true,
       enabled: !isDisabled,
@@ -75,13 +75,13 @@ class SBSecondaryButton extends StatelessWidget {
               color: isDisabled ? AppColors.line : AppColors.blue,
               width: 1.3,
             ),
-            borderRadius: BorderRadius.circular(SBDimensions.radiusMd),
+            borderRadius: BorderRadius.circular(SBDimensions.buttonRadius),
           ),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: isDisabled ? null : onPressed,
-              borderRadius: BorderRadius.circular(SBDimensions.radiusMd),
+              borderRadius: BorderRadius.circular(SBDimensions.buttonRadius),
               child: Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: SBSpacing.lg,

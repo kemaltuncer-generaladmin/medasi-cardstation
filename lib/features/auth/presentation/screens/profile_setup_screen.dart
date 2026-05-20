@@ -134,25 +134,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     return AuthScreenFrame(
       children: [
         const AuthHeader(
-          title: 'Bilgilerini\ntamamla',
-          subtitle: 'SourceBase deneyimini sana uygun\nhale getirelim.',
+          title: 'Profilini tamamla',
+          subtitle: 'Hesap ve çalışma alanı bilgilerini düzenle.',
           art: AuthArtType.register,
         ),
-        const SizedBox(height: 34),
+        const SizedBox(height: 24),
         AuthTextField(
           icon: Icons.account_balance_outlined,
           hint: 'Fakülte / Üniversite',
           controller: facultyController,
           textInputAction: TextInputAction.next,
         ),
-        const SizedBox(height: 14),
-        Container(
-          height: 58,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: const Color(0xFFD9E3F2)),
+        const SizedBox(height: 12),
+        InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'Bölüm',
+            prefixIcon: Icon(Icons.school_outlined),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
@@ -184,7 +181,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           const SizedBox(height: 14),
           AuthStatusBox(message: errorMessage!),
         ],
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
         GradientActionButton(
           label: loading ? 'Kaydediliyor...' : 'Devam Et',
           onPressed: loading ? null : _completeProfile,

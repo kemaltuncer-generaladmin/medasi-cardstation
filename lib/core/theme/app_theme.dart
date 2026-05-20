@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/constants/sb_dimensions.dart';
+import '../design_system/typography/sb_text_styles.dart';
 import 'app_colors.dart';
 
 class SourceBaseTheme {
   const SourceBaseTheme._();
 
   static ThemeData light() {
-    const radius = 12.0;
     const fieldBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.all(Radius.circular(radius)),
+      borderRadius: BorderRadius.all(Radius.circular(SBDimensions.inputRadius)),
       borderSide: BorderSide(color: AppColors.line),
     );
 
@@ -42,8 +43,8 @@ class SourceBaseTheme {
           horizontal: 16,
           vertical: 16,
         ),
-        hintStyle: const TextStyle(color: AppColors.softText),
-        labelStyle: const TextStyle(color: AppColors.muted),
+        hintStyle: SBTextStyles.bodyMedium.copyWith(color: AppColors.softText),
+        labelStyle: SBTextStyles.bodySmall.copyWith(color: AppColors.muted),
         border: fieldBorder,
         enabledBorder: fieldBorder,
         focusedBorder: fieldBorder.copyWith(
@@ -61,37 +62,29 @@ class SourceBaseTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(SBDimensions.cardRadius),
           side: const BorderSide(color: AppColors.line),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          minimumSize: const Size(48, 48),
+          minimumSize: const Size(48, SBDimensions.buttonHeight),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radius),
+            borderRadius: BorderRadius.circular(SBDimensions.buttonRadius),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0,
-          ),
+          textStyle: SBTextStyles.labelMedium,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size(48, 48),
+          minimumSize: const Size(48, SBDimensions.buttonHeight),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           side: const BorderSide(color: AppColors.line),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radius),
+            borderRadius: BorderRadius.circular(SBDimensions.buttonRadius),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0,
-          ),
+          textStyle: SBTextStyles.labelMedium,
         ),
       ),
       textButtonTheme: TextButtonThemeData(

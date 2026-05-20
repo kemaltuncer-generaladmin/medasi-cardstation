@@ -32,19 +32,22 @@ class _UploadsScreenState extends State<UploadsScreen> {
   List<UploadTask> get _visibleUploads {
     return switch (_filter) {
       _UploadFilterKind.all => widget.uploads,
-      _UploadFilterKind.active => widget.uploads
-          .where(
-            (upload) =>
-                upload.status == DriveItemStatus.uploading ||
-                upload.status == DriveItemStatus.processing,
-          )
-          .toList(),
-      _UploadFilterKind.completed => widget.uploads
-          .where((upload) => upload.status == DriveItemStatus.completed)
-          .toList(),
-      _UploadFilterKind.failed => widget.uploads
-          .where((upload) => upload.status == DriveItemStatus.failed)
-          .toList(),
+      _UploadFilterKind.active =>
+        widget.uploads
+            .where(
+              (upload) =>
+                  upload.status == DriveItemStatus.uploading ||
+                  upload.status == DriveItemStatus.processing,
+            )
+            .toList(),
+      _UploadFilterKind.completed =>
+        widget.uploads
+            .where((upload) => upload.status == DriveItemStatus.completed)
+            .toList(),
+      _UploadFilterKind.failed =>
+        widget.uploads
+            .where((upload) => upload.status == DriveItemStatus.failed)
+            .toList(),
     };
   }
 
@@ -53,39 +56,15 @@ class _UploadsScreenState extends State<UploadsScreen> {
     final visibleUploads = _visibleUploads;
     return WorkspaceScroll(
       children: [
-        DriveTopBar(title: 'Drive', onSearch: widget.onSearch),
-        Row(
-          children: [
-            Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: AppColors.line),
-              ),
-              child: IconButton(
-                onPressed: widget.onBack,
-                icon: const Icon(Icons.arrow_back_rounded, size: 33),
-                color: AppColors.navy,
-              ),
-            ),
-            const SizedBox(width: 18),
-            const Expanded(
-              child: Text(
-                'Yüklemeler',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.navy,
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ],
+        DriveTopBar(
+          title: 'Yüklemeler',
+          onSearch: widget.onSearch,
+          onBack: widget.onBack,
+          showBrand: false,
         ),
         const SizedBox(height: 18),
+        _UploadGuidancePanel(onNewFile: widget.onNewFile),
+        const SizedBox(height: 14),
         GlassPanel(
           padding: const EdgeInsets.all(22),
           child: LayoutBuilder(
@@ -104,7 +83,7 @@ class _UploadsScreenState extends State<UploadsScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Yükleme, metin çıkarımı ve hata durumlarını buradan takip edebilirsiniz.',
+                    'Yükleme, metin çıkarımı ve hazır olma durumlarını buradan takip edebilirsin.',
                     style: TextStyle(
                       color: AppColors.muted,
                       fontSize: 17,
@@ -147,38 +126,37 @@ class _UploadsScreenState extends State<UploadsScreen> {
           ),
         ),
         const SizedBox(height: 18),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _UploadFilter(
-                label: 'Tümü',
-                icon: Icons.format_list_bulleted_rounded,
-                active: _filter == _UploadFilterKind.all,
-                onTap: () => setState(() => _filter = _UploadFilterKind.all),
-              ),
-              _UploadFilter(
-                label: 'Yükleniyor',
-                icon: Icons.sync_rounded,
-                active: _filter == _UploadFilterKind.active,
-                onTap: () => setState(() => _filter = _UploadFilterKind.active),
-              ),
-              _UploadFilter(
-                label: 'Hazır',
-                icon: Icons.check_circle_outline_rounded,
-                active: _filter == _UploadFilterKind.completed,
-                onTap: () =>
-                    setState(() => _filter = _UploadFilterKind.completed),
-              ),
-              _UploadFilter(
-                label: 'Hata',
-                icon: Icons.warning_amber_rounded,
-                color: AppColors.red,
-                active: _filter == _UploadFilterKind.failed,
-                onTap: () => setState(() => _filter = _UploadFilterKind.failed),
-              ),
-            ],
-          ),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _UploadFilter(
+              label: 'Tümü',
+              icon: Icons.format_list_bulleted_rounded,
+              active: _filter == _UploadFilterKind.all,
+              onTap: () => setState(() => _filter = _UploadFilterKind.all),
+            ),
+            _UploadFilter(
+              label: 'Aktif',
+              icon: Icons.sync_rounded,
+              active: _filter == _UploadFilterKind.active,
+              onTap: () => setState(() => _filter = _UploadFilterKind.active),
+            ),
+            _UploadFilter(
+              label: 'Hazır',
+              icon: Icons.check_circle_outline_rounded,
+              active: _filter == _UploadFilterKind.completed,
+              onTap: () =>
+                  setState(() => _filter = _UploadFilterKind.completed),
+            ),
+            _UploadFilter(
+              label: 'Hatalı',
+              icon: Icons.warning_amber_rounded,
+              color: AppColors.red,
+              active: _filter == _UploadFilterKind.failed,
+              onTap: () => setState(() => _filter = _UploadFilterKind.failed),
+            ),
+          ],
         ),
         const SizedBox(height: 18),
         if (widget.uploads.isEmpty)
@@ -228,6 +206,66 @@ class _UploadsScreenState extends State<UploadsScreen> {
         'Yükleme hatası olursa dosyayı tekrar seçerek deneyebilirsiniz.',
       _UploadFilterKind.all => 'Yeni dosyalar yükleyerek başlayabilirsiniz.',
     };
+  }
+}
+
+class _UploadGuidancePanel extends StatelessWidget {
+  const _UploadGuidancePanel({required this.onNewFile});
+
+  final VoidCallback onNewFile;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassPanel(
+      padding: const EdgeInsets.all(18),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 560;
+          final text = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text(
+                'Kaynağını yükle',
+                style: TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'PDF, PPTX veya DOCX dosyanı ekleyerek çalışmaya başlayabilirsin. Taranmış PDF’lerde okunabilir metin bulunmayabilir; eski PPT/DOC dosyaları sınırlı desteklenir.',
+                style: TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          );
+          final action = SBPrimaryButton(
+            label: 'Dosya seç',
+            icon: Icons.cloud_upload_outlined,
+            onPressed: onNewFile,
+            size: SBButtonSize.medium,
+            fullWidth: compact,
+          );
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [text, const SizedBox(height: 14), action],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: text),
+              const SizedBox(width: 18),
+              SizedBox(width: 180, child: action),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -306,35 +344,33 @@ class _UploadFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 13),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: active ? AppColors.blue : AppColors.line,
-              width: active ? 1.3 : 1,
-            ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 13),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: active ? AppColors.blue : AppColors.line,
+            width: active ? 1.3 : 1,
           ),
-          child: Row(
-            children: [
-              Icon(icon, color: active ? AppColors.blue : color, size: 24),
-              const SizedBox(width: 9),
-              Text(
-                label,
-                style: TextStyle(
-                  color: active ? AppColors.blue : AppColors.navy,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: active ? AppColors.blue : color, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: active ? AppColors.blue : AppColors.navy,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -449,9 +485,9 @@ class _UploadState extends StatelessWidget {
           children: [
             const StatusPill(status: DriveItemStatus.completed),
             const SizedBox(height: 12),
-            Text(
-              upload.file.updatedLabel,
-              style: const TextStyle(color: AppColors.muted, fontSize: 14),
+            const Text(
+              'Kaynak hazır. BaseForce ve SourceLab içinde kullanılabilir.',
+              style: TextStyle(color: AppColors.muted, fontSize: 14),
             ),
           ],
         );
@@ -462,9 +498,9 @@ class _UploadState extends StatelessWidget {
             const StatusPill(status: DriveItemStatus.failed),
             const SizedBox(height: 9),
             Text(
-              upload.errorLabel ??
-                  upload.file.statusMessage ??
-                  'Dosya işlenemedi. Dosyayı kontrol edip tekrar deneyin.',
+              driveFriendlyErrorMessage(
+                upload.errorLabel ?? upload.file.statusMessage ?? '',
+              ),
               style: const TextStyle(color: AppColors.muted, fontSize: 14),
             ),
             const SizedBox(height: 8),
@@ -485,16 +521,16 @@ class _UploadState extends StatelessWidget {
       case DriveItemStatus.processing:
         return _ProgressStatus(
           icon: Icons.auto_awesome_rounded,
-          title: 'AI Analizi',
-          subtitle: 'Analiz ediliyor...',
+          title: 'Kaynak işleniyor',
+          subtitle: 'Metin çıkarılıyor ve üretime hazırlanıyor.',
           progress: upload.progress,
           color: AppColors.purple,
         );
       case DriveItemStatus.uploading:
         return _ProgressStatus(
           icon: Icons.sync_rounded,
-          title: 'Yükleniyor',
-          subtitle: 'Bekleniyor...',
+          title: 'Dosya yükleniyor',
+          subtitle: 'Bu işlem dosya boyutuna göre kısa sürebilir.',
           progress: upload.progress,
           color: AppColors.blue,
           bigPercent: true,

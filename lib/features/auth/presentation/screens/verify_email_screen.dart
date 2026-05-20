@@ -109,16 +109,9 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       errorMessage = null;
     });
     try {
-      await SourceBaseAuthBackend.verifyEmailOtp(
-        email: email,
-        token: code,
-      );
+      await SourceBaseAuthBackend.verifyEmailOtp(email: email, token: code);
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        _routeAfterAuth,
-        (_) => false,
-      );
+      Navigator.pushNamedAndRemoveUntil(context, _routeAfterAuth, (_) => false);
     } catch (error) {
       if (mounted) {
         setState(
@@ -186,11 +179,12 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     return AuthScreenFrame(
       children: [
         const AuthHeader(
-          title: 'E-postanı\ndoğrula',
-          subtitle: 'E-postandaki bağlantıyı aç veya\n6 haneli doğrulama kodunu gir.',
+          title: 'E-postanı doğrula',
+          subtitle:
+              'E-posta adresini doğrulayarak hesabını güvenli hale getir.',
           art: AuthArtType.verify,
         ),
-        const SizedBox(height: 50),
+        const SizedBox(height: 28),
         if (email.isNotEmpty)
           Text(
             email,
@@ -202,7 +196,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               fontWeight: FontWeight.w700,
             ),
           ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List.generate(
@@ -234,7 +228,10 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.blue, width: 2),
+                    borderSide: const BorderSide(
+                      color: AppColors.blue,
+                      width: 2,
+                    ),
                   ),
                 ),
                 onChanged: (value) {
@@ -267,8 +264,9 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               ),
               Flexible(
                 child: TextButton(
-                  onPressed:
-                      loading || !_canResend ? null : () => _resend(email),
+                  onPressed: loading || !_canResend
+                      ? null
+                      : () => _resend(email),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.blue,
                     minimumSize: Size.zero,
@@ -307,7 +305,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
             error: errorMessage != null,
           ),
         ],
-        const SizedBox(height: 38),
+        const SizedBox(height: 24),
         GradientActionButton(
           label: loading ? 'Doğrulanıyor...' : 'Doğrula',
           onPressed: loading ? null : () => _verify(email),
@@ -318,9 +316,9 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
             onPressed: loading
                 ? null
                 : () => Navigator.pushReplacementNamed(
-                      context,
-                      RegisterScreen.route,
-                    ),
+                    context,
+                    RegisterScreen.route,
+                  ),
             style: TextButton.styleFrom(foregroundColor: AppColors.blue),
             child: const Text(
               'E-postayı değiştir',

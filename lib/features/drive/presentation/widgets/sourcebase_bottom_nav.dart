@@ -16,8 +16,8 @@ class SourceBaseBottomNav extends StatelessWidget {
 
   static const double navHeight = 76;
   static const double navTopGap = 8;
-  static const double contentBuffer = 172;
-  static const double contentTailGuard = 28;
+  static const double contentBuffer = 24;
+  static const double contentTailGuard = 20;
   static const double minBottomSafeArea = 14;
 
   static double safeAreaBottom(BuildContext context) {
@@ -43,10 +43,10 @@ class SourceBaseBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     const items = [
       _BottomItem(Icons.psychology_outlined, 'Merkezi AI'),
-      _BottomItem(Icons.folder_rounded, 'Drive Ekranı'),
+      _BottomItem(Icons.folder_rounded, 'Drive'),
       _BottomItem(Icons.layers_rounded, 'BaseForce'),
       _BottomItem(Icons.science_outlined, 'SourceLab'),
-      _BottomItem(Icons.manage_accounts_outlined, 'Profil ve Ayarlar'),
+      _BottomItem(Icons.manage_accounts_outlined, 'Profil'),
     ];
 
     return Positioned(

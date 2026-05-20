@@ -3,7 +3,7 @@ import '../../theme/app_colors.dart';
 import '../constants/sb_spacing.dart';
 
 /// SourceBase Text Button
-/// 
+///
 /// Minimal button for links and tertiary actions. Features:
 /// - Text only, no background
 /// - Optional icon
@@ -28,7 +28,7 @@ class SBTextButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDisabled = onPressed == null;
-    
+
     return Semantics(
       button: true,
       enabled: !isDisabled,

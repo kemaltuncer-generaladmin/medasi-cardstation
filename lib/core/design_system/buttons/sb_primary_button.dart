@@ -6,7 +6,7 @@ import '../constants/sb_spacing.dart';
 enum SBButtonSize { small, medium, large, xLarge }
 
 /// SourceBase Primary Button
-/// 
+///
 /// Gradient button for primary actions. Features:
 /// - Gradient background with shadow
 /// - Loading state support
@@ -61,7 +61,7 @@ class SBPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDisabled = onPressed == null || loading;
-    
+
     return Semantics(
       button: true,
       enabled: !isDisabled,
@@ -75,7 +75,7 @@ class SBPrimaryButton extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: isDisabled ? null : AppColors.primaryGradient,
             color: isDisabled ? AppColors.line : null,
-            borderRadius: BorderRadius.circular(SBDimensions.radiusMd),
+            borderRadius: BorderRadius.circular(SBDimensions.buttonRadius),
             boxShadow: isDisabled
                 ? null
                 : [
@@ -90,7 +90,7 @@ class SBPrimaryButton extends StatelessWidget {
             color: Colors.transparent,
             child: InkWell(
               onTap: isDisabled ? null : onPressed,
-              borderRadius: BorderRadius.circular(SBDimensions.radiusMd),
+              borderRadius: BorderRadius.circular(SBDimensions.buttonRadius),
               child: Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: SBSpacing.lg,

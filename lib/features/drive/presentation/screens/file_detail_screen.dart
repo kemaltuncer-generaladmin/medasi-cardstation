@@ -29,14 +29,12 @@ class FileDetailScreen extends StatefulWidget {
 }
 
 class _FileDetailScreenState extends State<FileDetailScreen> {
-  int _previewIndex = 0;
-
   @override
   Widget build(BuildContext context) {
     final file = widget.file;
     final generatedCount = file.generated.length;
     final hasGenerated = generatedCount > 0;
-    final readyForGeneration = file.isReadyForGeneration;
+    final readyForGeneration = driveFileUsableForGeneration(file);
     final readinessMessage = _readinessMessage(file);
 
     return WorkspaceScroll(
@@ -153,9 +151,9 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
             ],
           ),
         ),
-        if (!readyForGeneration && file.statusMessage != null) ...[
+        if (!readyForGeneration) ...[
           const SizedBox(height: 12),
-          _ReadinessNotice(message: file.statusMessage!),
+          _ReadinessNotice(message: readinessMessage),
         ],
         const SectionTitle(title: 'Dosya Özeti'),
         GlassPanel(
@@ -326,62 +324,33 @@ class _FileDetailScreenState extends State<FileDetailScreen> {
                   ),
                 ),
         ),
-        if (file.pageLabel != 'İşleniyor') ...[
-          const SectionTitle(title: 'Önizleme'),
-          GlassPanel(
-            padding: const EdgeInsets.all(12),
-            child: SizedBox(
-              height: 128,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                itemCount: 5,
-                separatorBuilder: (_, _) => const SizedBox(width: 10),
-                itemBuilder: (context, index) => _PreviewPage(
-                  index: index,
-                  selected: index == _previewIndex,
-                  onTap: () => setState(() => _previewIndex = index),
-                ),
-              ),
-            ),
-          ),
-        ],
         const WorkspaceBottomNavGuard(),
       ],
     );
   }
 
   String _statusShortLabel(DriveItemStatus status) {
-    return switch (status) {
-      DriveItemStatus.completed => 'Hazır',
-      DriveItemStatus.processing => 'İşleniyor',
-      DriveItemStatus.uploading => 'Yükleniyor',
-      DriveItemStatus.failed => 'Hata',
-      DriveItemStatus.draft => 'Taslak',
-    };
+    return driveStatusLabel(status);
   }
 
   String _readinessMessage(DriveFile file) {
     final message = file.statusMessage;
-    if (message != null && message.isNotEmpty) return message;
-    return switch (file.status) {
-      DriveItemStatus.completed => 'Kaynak üretime hazır.',
-      DriveItemStatus.processing =>
-        'Dosya metni çıkarılıyor. İşlem tamamlanınca üretim için kullanılabilir.',
-      DriveItemStatus.uploading =>
-        'Yükleme devam ediyor. Tamamlanmadan üretim başlatılamaz.',
-      DriveItemStatus.failed =>
-        'Dosya işlenemedi. Dosyayı kontrol edip tekrar yükleyin.',
-      DriveItemStatus.draft => 'Taslak dosyalar üretimde kullanılamaz.',
-    };
+    if (message != null && message.isNotEmpty) {
+      return driveFriendlyErrorMessage(message);
+    }
+    if (file.status == DriveItemStatus.completed &&
+        !driveFileUsableForGeneration(file)) {
+      return 'Bu kaynağın boyut bilgisi eksik görünüyor. Dosyayı kontrol edip tekrar yüklemeyi deneyebilirsin.';
+    }
+    return driveStatusInfo(file.status).description;
   }
 
   String _blockedGenerationTitle(DriveItemStatus status) {
     return switch (status) {
-      DriveItemStatus.failed => 'Bu kaynak üretime hazır değil.',
+      DriveItemStatus.failed => 'Kaynak işlenemedi.',
       DriveItemStatus.processing => 'Dosya işleniyor.',
       DriveItemStatus.uploading => 'Yükleme devam ediyor.',
-      DriveItemStatus.draft => 'Taslak kaynak seçilemez.',
+      DriveItemStatus.draft => 'Eksik yükleme.',
       DriveItemStatus.completed => 'Dosya hazır.',
     };
   }
@@ -688,103 +657,4 @@ class _UpdatedPill extends StatelessWidget {
       ),
     );
   }
-}
-
-class _PreviewPage extends StatelessWidget {
-  const _PreviewPage({
-    required this.index,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final int index;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: 96,
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? AppColors.blue : AppColors.line,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: CustomPaint(
-                painter: _PreviewPainter(index: index),
-                child: const SizedBox.expand(),
-              ),
-            ),
-            Container(
-              width: 26,
-              height: 26,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected ? AppColors.blue : AppColors.white,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: selected ? AppColors.blue : AppColors.line,
-                ),
-              ),
-              child: Text(
-                '${index + 1}',
-                style: TextStyle(
-                  color: selected ? Colors.white : AppColors.navy,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PreviewPainter extends CustomPainter {
-  const _PreviewPainter({required this.index});
-
-  final int index;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final text = Paint()
-      ..color = AppColors.navy.withValues(alpha: .75)
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-    final red = Paint()
-      ..color = const Color(0xFFFF6B6B)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-    for (var i = 0; i < 5; i++) {
-      canvas.drawLine(
-        Offset(8, 12 + i * 10),
-        Offset(size.width - 10, 12 + i * 10),
-        text,
-      );
-    }
-    if (index == 0) {
-      canvas.drawCircle(Offset(size.width / 2, size.height / 2), 14, red);
-      canvas.drawLine(
-        Offset(12, size.height / 2),
-        Offset(size.width - 12, size.height / 2),
-        red,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _PreviewPainter oldDelegate) =>
-      oldDelegate.index != index;
 }
